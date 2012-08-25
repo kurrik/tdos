@@ -66,6 +66,7 @@ type State struct {
 	running    bool
 	score      int
 	boundaries []*twodee.Sprite
+	creatures  []*twodee.Sprite
 	screenxmin float32
 	screenxmax float32
 	screenymin float32
@@ -114,38 +115,60 @@ func (s *State) CheckKeys(ms float32) {
 	}
 }
 
-func (s *State) Update(ms float32) {
-	s.textfps.SetText(fmt.Sprintf("FPS %-5.1f", (1000.0 / ms)))
+func (s *State) Visible(sprite *twodee.Sprite) bool {
+	var (
+		left   = 0 - s.env.X
+		right  = left + float32(s.window.Width)
+		top    = 0 - s.env.Y
+		bottom = top + float32(s.window.Height)
+	)
+	var (
+		inX = left <= sprite.X-float32(sprite.Width) && sprite.X <= right
+		inY = top <= sprite.Y-float32(sprite.Height) && sprite.Y <= bottom
+	)
+	return inX && inY
+}
 
-	s.char.VelocityY += 0.3
-	dX := Round(s.char.VelocityX * ms)
-	dY := Round(s.char.VelocityY * ms)
+func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) {
+	sprite.VelocityY += 0.3 // Gravity
+	dX := Round(sprite.VelocityX * ms)
+	dY := Round(sprite.VelocityY * ms)
 	for _, b := range s.boundaries {
-		if dX != 0 && !s.char.TestMove(dX, 0, b) {
-			if s.char.TestMove(dX, float32(-b.Height), b) {
-				s.char.Y -= float32(b.Height)
+		if dX != 0 && !sprite.TestMove(dX, 0, b) {
+			if sprite.TestMove(dX, float32(-b.Height), b) {
+				sprite.Y -= float32(b.Height)
 			} else {
 				if dX < 0 {
-					s.char.X = b.X + float32(b.Width)
+					sprite.X = b.X + float32(b.Width)
 				} else {
-					s.char.X = b.X - float32(s.char.Width)
+					sprite.X = b.X - float32(sprite.Width)
 				}
-				s.char.VelocityX = 0
+				sprite.VelocityX = 0
 				dX = 0
 			}
 		}
-		if dY != 0 && !s.char.TestMove(0, dY, b) {
+		if dY != 0 && !sprite.TestMove(0, dY, b) {
 			if dY < 0 {
-				s.char.Y = b.Y + float32(b.Height)
+				sprite.Y = b.Y + float32(b.Height)
 			} else {
-				s.char.Y = b.Y - float32(s.char.Height)
+				sprite.Y = b.Y - float32(sprite.Height)
 			}
-			s.char.VelocityY = 0
+			sprite.VelocityY = 0
 			dY = 0
 		}
 	}
-	s.char.X = Round(s.char.X + dX)
-	s.char.Y = Round(s.char.Y + dY)
+	sprite.X = Round(sprite.X + dX)
+	sprite.Y = Round(sprite.Y + dY)
+}
+
+func (s *State) Update(ms float32) {
+	s.textfps.SetText(fmt.Sprintf("FPS %-5.1f", (1000.0 / ms)))
+	s.UpdateSprite(s.char, ms)
+	for _, c := range s.creatures {
+		if s.Visible(c) {
+			s.UpdateSprite(c, ms)
+		}
+	}
 }
 
 func (s *State) UpdateViewport() {
@@ -165,17 +188,22 @@ func (s *State) UpdateViewport() {
 	}
 }
 
-func (s *State) HandleAddBlock(sprite *twodee.Sprite, block *twodee.EnvBlock) {
+func (s *State) HandleAddBlock(env *twodee.Env, block *twodee.EnvBlock, sprite *twodee.Sprite, x float32, y float32) {
 	switch block.Type {
 	case START:
-		s.char = s.system.NewSprite("char-textures", 0, 0, 32, 64)
+		s.char = s.system.NewSprite("char-textures", 0, 0, 32, 64, PLAYER)
 		s.char.SetFrame(2)
 		s.char.X = sprite.X
 		s.char.Y = sprite.Y - 100
-		sprite.Parent().AddChild(s.char)
+		env.AddChild(s.char)
 		fallthrough
 	case FLOOR:
 		s.boundaries = append(s.boundaries, sprite)
+	case BADGUY:
+		badguy := s.system.NewSprite("char-textures", x, y - 64, 32, 64, BADGUY)
+		badguy.SetFrame(1)
+		s.creatures = append(s.creatures, badguy)
+		env.AddChild(badguy)
 	}
 }
 
@@ -190,6 +218,8 @@ func (s *State) Paint(ms float32) {
 const (
 	FLOOR = iota
 	START
+	PLAYER
+	BADGUY
 )
 
 type TexInfo struct {
@@ -200,10 +230,11 @@ type TexInfo struct {
 
 func Init(system *twodee.System) (state *State, err error) {
 	var (
-		env      *twodee.Env
-		opts     twodee.EnvOpts
+		env  *twodee.Env
+		opts twodee.EnvOpts
 	)
 	state = &State{}
+	state.creatures = make([]*twodee.Sprite, 0)
 	state.boundaries = make([]*twodee.Sprite, 0)
 	state.hud = &twodee.Scene{}
 	state.scene = &twodee.Scene{}
@@ -224,8 +255,8 @@ func Init(system *twodee.System) (state *State, err error) {
 			return
 		}
 	}
-	BlockHandler := func(sprite *twodee.Sprite, block *twodee.EnvBlock) {
-		state.HandleAddBlock(sprite, block)
+	BlockHandler := func(env *twodee.Env, block *twodee.EnvBlock, sprite *twodee.Sprite, x float32, y float32) {
+		state.HandleAddBlock(env, block, sprite, x, y)
 	}
 	opts = twodee.EnvOpts{
 		Blocks: []*twodee.EnvBlock{
@@ -245,6 +276,12 @@ func Init(system *twodee.System) (state *State, err error) {
 				Color:      color.RGBA{0, 0, 0, 255},
 				Type:       START,
 				FrameIndex: 1,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
+				Color:      color.RGBA{51, 51, 51, 255},
+				Type:       BADGUY,
+				FrameIndex: -1,
 				Handler:    BlockHandler,
 			},
 		},
@@ -268,7 +305,7 @@ func Init(system *twodee.System) (state *State, err error) {
 	// Do this later so that the hud renders last
 	state.scene.AddChild(state.hud)
 	state.textscore = system.NewText("font1-textures", 0, 0, 4, "")
-	state.textfps = system.NewText("font1-textures", 0, float32(state.window.Height - 32), 2, "")
+	state.textfps = system.NewText("font1-textures", 0, float32(state.window.Height-32), 2, "")
 	state.hud.AddChild(state.textscore)
 	state.hud.AddChild(state.textfps)
 	state.hud.Z = 0.5
@@ -289,7 +326,7 @@ func main() {
 		elapsed := time.Since(tick)
 		//fmt.Printf("Elapsed: %v\n", float32(elapsed) / float32(time.Millisecond))
 		tick = time.Now()
-		ms := Min(float32(elapsed) / float32(time.Millisecond), 50)
+		ms := Min(float32(elapsed)/float32(time.Millisecond), 50)
 		state.CheckKeys(ms)
 		state.Update(ms)
 		state.UpdateViewport()
