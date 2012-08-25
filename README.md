@@ -11,14 +11,16 @@ Tasks
 * Player controls (DONE)
 * Collision detection (DONE)
 * Timer (DONE)
-* Screen overlay
-* Physics
-* Better sprites
+* Screen overlay (DONE)
+* Physics (DONE)
+* Points
+* 1ups
 * Monsters
+* Better sprites
 
 Bugs
 ----
-* Player z-index
+* Player z-index (FIXED)
 
 Ideas (spoilers!)
 -----------------
