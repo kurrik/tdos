@@ -30,17 +30,23 @@ func Check(err error) {
 }
 
 func Min(a float32, b float32) float32 {
-	if a < b { return a }
+	if a < b {
+		return a
+	}
 	return b
 }
 
 func Max(a float32, b float32) float32 {
-	if a < b { return b }
+	if a < b {
+		return b
+	}
 	return a
 }
 
 func Abs(a float32) float32 {
-	if a < 0 { return -a }
+	if a < 0 {
+		return -a
+	}
 	return a
 }
 
@@ -51,6 +57,7 @@ func Round(a float32) float32 {
 type State struct {
 	system     *twodee.System
 	scene      *twodee.Scene
+	hud        *twodee.Scene
 	env        *twodee.Env
 	window     *twodee.Window
 	char       *twodee.Sprite
@@ -82,9 +89,9 @@ func (s *State) CheckKeys(ms float32) {
 	}
 	switch {
 	case s.system.Key(twodee.KeyLeft) == 1 && s.system.Key(twodee.KeyRight) == 0:
-		s.char.VelocityX = Max(-speed, Min(-minspeed, s.char.VelocityX - accel))
+		s.char.VelocityX = Max(-speed, Min(-minspeed, s.char.VelocityX-accel))
 	case s.system.Key(twodee.KeyLeft) == 0 && s.system.Key(twodee.KeyRight) == 1:
-		s.char.VelocityX = Min(speed, Max(minspeed, s.char.VelocityX + accel))
+		s.char.VelocityX = Min(speed, Max(minspeed, s.char.VelocityX+accel))
 	default:
 		if Abs(s.char.VelocityX) <= decel {
 			s.char.VelocityX = 0
@@ -146,8 +153,8 @@ func (s *State) UpdateViewport() {
 func (s *State) HandleAddBlock(sprite *twodee.Sprite, block *twodee.EnvBlock) {
 	switch block.Type {
 	case START:
-		s.char = s.system.NewSprite("char-textures", 0, 0, 32, 64, 4)
-		s.char.Frame = 2
+		s.char = s.system.NewSprite("char-textures", 0, 0, 32, 64)
+		s.char.SetFrame(2)
 		s.char.X = sprite.X
 		s.char.Y = sprite.Y - 100
 		sprite.Parent().AddChild(s.char)
@@ -157,20 +164,35 @@ func (s *State) HandleAddBlock(sprite *twodee.Sprite, block *twodee.EnvBlock) {
 	}
 }
 
+func (s *State) Running() bool {
+	return s.running && s.window.Opened()
+}
+
+func (s *State) Paint(ms float32) {
+	s.system.Paint(s.scene)
+}
+
 const (
 	FLOOR = iota
 	START
 )
 
+type TexInfo struct {
+	Name  string
+	Path  string
+	Width int
+}
+
 func Init(system *twodee.System) (state *State, err error) {
 	var (
 		env      *twodee.Env
-		textures map[string]string
 		opts     twodee.EnvOpts
 	)
 	state = &State{}
 	state.boundaries = make([]*twodee.Sprite, 0)
+	state.hud = &twodee.Scene{}
 	state.scene = &twodee.Scene{}
+	state.scene.AddChild(state.hud)
 	state.window = &twodee.Window{
 		Width:  640,
 		Height: 480,
@@ -178,12 +200,13 @@ func Init(system *twodee.System) (state *State, err error) {
 	}
 	state.system = system
 	state.system.Open(state.window)
-	textures = map[string]string{
-		"level-textures": "assets/level-textures.png",
-		"char-textures":  "assets/char-textures.png",
+	textures := []TexInfo{
+		TexInfo{"level-textures", "assets/level-textures.png", 8},
+		TexInfo{"char-textures", "assets/char-textures.png", 16},
+		TexInfo{"number-textures", "assets/number-textures.png", 0},
 	}
-	for name, path := range textures {
-		if err = system.LoadTexture(name, path, twodee.IntNearest); err != nil {
+	for _, t := range textures {
+		if err = system.LoadTexture(t.Name, t.Path, twodee.IntNearest, t.Width); err != nil {
 			return
 		}
 	}
@@ -209,7 +232,6 @@ func Init(system *twodee.System) (state *State, err error) {
 		MapPath:     "assets/level-fw.png",
 		BlockWidth:  32,
 		BlockHeight: 32,
-		Frames:      2,
 	}
 	if env, err = system.LoadEnv(opts); err != nil {
 		return
@@ -226,14 +248,6 @@ func Init(system *twodee.System) (state *State, err error) {
 	return
 }
 
-func (s *State) Running() bool {
-	return s.running && s.window.Opened()
-}
-
-func (s *State) Paint() {
-	s.system.Paint(s.scene)
-}
-
 func main() {
 	system, err := twodee.Init()
 	Check(err)
@@ -243,11 +257,11 @@ func main() {
 	Check(err)
 	tick := time.Now()
 	for state.Running() {
-		ms := Min(float32(time.Since(tick)) / float32(time.Millisecond), 0.01)
+		ms := Min(float32(time.Since(tick))/float32(time.Millisecond), 0.01)
 		state.CheckKeys(ms)
 		state.Update(ms)
 		state.UpdateViewport()
-		state.Paint()
+		state.Paint(ms)
 		tick = time.Now()
 	}
 }
