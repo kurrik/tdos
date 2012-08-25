@@ -215,7 +215,7 @@ func Init(system *twodee.System) (state *State, err error) {
 	state.system = system
 	state.system.Open(state.window)
 	textures := []TexInfo{
-		TexInfo{"level-textures", "assets/level-textures.png", 8},
+		TexInfo{"level-textures", "assets/level-textures.png", 16},
 		TexInfo{"char-textures", "assets/char-textures.png", 16},
 		TexInfo{"font1-textures", "assets/font1-textures.png", 0},
 	}
@@ -231,6 +231,12 @@ func Init(system *twodee.System) (state *State, err error) {
 		Blocks: []*twodee.EnvBlock{
 			&twodee.EnvBlock{
 				Color:      color.RGBA{153, 102, 0, 255},
+				Type:       FLOOR,
+				FrameIndex: 0,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
+				Color:      color.RGBA{0, 204, 51, 255},
 				Type:       FLOOR,
 				FrameIndex: 1,
 				Handler:    BlockHandler,
