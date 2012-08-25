@@ -15,6 +15,10 @@ Tasks
 * Better sprites
 * Monsters
 
+Bugs
+----
+* Player z-index
+
 Ideas (spoilers!)
 -----------------
 * Powerup by losing a life
