@@ -13,10 +13,11 @@ Tasks
 * Timer (DONE)
 * Screen overlay (DONE)
 * Physics (DONE)
+* Monsters
 * Points
 * 1ups
-* Monsters
 * Better sprites
+* Parallax
 
 Bugs
 ----
