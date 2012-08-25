@@ -207,7 +207,6 @@ func Init(system *twodee.System) (state *State, err error) {
 	state.boundaries = make([]*twodee.Sprite, 0)
 	state.hud = &twodee.Scene{}
 	state.scene = &twodee.Scene{}
-	state.scene.AddChild(state.hud)
 	state.window = &twodee.Window{
 		Width:  640,
 		Height: 480,
@@ -260,10 +259,13 @@ func Init(system *twodee.System) (state *State, err error) {
 	state.screenymin = float32(-state.env.Height + state.window.Height)
 	state.screenymax = 0
 
+	// Do this later so that the hud renders last
+	state.scene.AddChild(state.hud)
 	state.textscore = system.NewText("font1-textures", 0, 0, 4, "")
 	state.textfps = system.NewText("font1-textures", 0, float32(state.window.Height - 16), 1, "")
 	state.hud.AddChild(state.textscore)
 	state.hud.AddChild(state.textfps)
+	state.hud.Z = 0.5
 	state.SetScore(0)
 	state.running = true
 	return
