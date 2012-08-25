@@ -58,15 +58,24 @@ type State struct {
 	system     *twodee.System
 	scene      *twodee.Scene
 	hud        *twodee.Scene
+	textscore  *twodee.Text
+	textfps    *twodee.Text
 	env        *twodee.Env
 	window     *twodee.Window
 	char       *twodee.Sprite
 	running    bool
+	score      int
 	boundaries []*twodee.Sprite
 	screenxmin float32
 	screenxmax float32
 	screenymin float32
 	screenymax float32
+}
+
+func (s *State) SetScore(score int) {
+	s.score = score
+	s.textscore.SetText(fmt.Sprintf("%v", s.score))
+	s.textscore.X = float32(s.window.Width - s.textscore.Width)
 }
 
 func (s *State) HandleKeys(key, state int) {
@@ -76,11 +85,11 @@ func (s *State) HandleKeys(key, state int) {
 	}
 }
 
-func (s *State) CheckKeys(ms float32) {
-	var speed float32 = 4000
-	var minspeed float32 = 2000
-	var accel float32 = 40000 * ms
-	var decel float32 = 2 * accel
+func (s *State) CheckKeys(us float32) {
+	var speed float32 = 20
+	var minspeed float32 = 5
+	var accel float32 = 0.01 * us
+	var decel float32 = 0.5 * us
 	switch {
 	case s.system.Key(twodee.KeyUp) == 1 && s.system.Key(twodee.KeyDown) == 0:
 		s.char.VelocityY = -speed
@@ -105,19 +114,25 @@ func (s *State) CheckKeys(ms float32) {
 	}
 }
 
-func (s *State) Update(ms float32) {
-	s.char.VelocityY += 500
-	dX := Round(s.char.VelocityX * ms)
-	dY := Round(s.char.VelocityY * ms)
+func (s *State) Update(us float32) {
+	s.textfps.SetText(fmt.Sprintf("%6.0f FPS", (1000000.0 / us)))
+
+	s.char.VelocityY += 5
+	dX := Round(s.char.VelocityX * us)
+	dY := Round(s.char.VelocityY * us)
 	for _, b := range s.boundaries {
 		if dX != 0 && !s.char.TestMove(dX, 0, b) {
-			if dX < 0 {
-				s.char.X = b.X + float32(b.Width)
+			if s.char.TestMove(dX, float32(-b.Height), b) {
+				s.char.Y -= float32(b.Height)
 			} else {
-				s.char.X = b.X - float32(s.char.Width)
+				if dX < 0 {
+					s.char.X = b.X + float32(b.Width)
+				} else {
+					s.char.X = b.X - float32(s.char.Width)
+				}
+				s.char.VelocityX = 0
+				dX = 0
 			}
-			s.char.VelocityX = 0
-			dX = 0
 		}
 		if dY != 0 && !s.char.TestMove(0, dY, b) {
 			if dY < 0 {
@@ -203,7 +218,7 @@ func Init(system *twodee.System) (state *State, err error) {
 	textures := []TexInfo{
 		TexInfo{"level-textures", "assets/level-textures.png", 8},
 		TexInfo{"char-textures", "assets/char-textures.png", 16},
-		TexInfo{"number-textures", "assets/number-textures.png", 0},
+		TexInfo{"font1-textures", "assets/font1-textures.png", 0},
 	}
 	for _, t := range textures {
 		if err = system.LoadTexture(t.Name, t.Path, twodee.IntNearest, t.Width); err != nil {
@@ -230,8 +245,8 @@ func Init(system *twodee.System) (state *State, err error) {
 		},
 		TextureName: "level-textures",
 		MapPath:     "assets/level-fw.png",
-		BlockWidth:  32,
-		BlockHeight: 32,
+		BlockWidth:  16,
+		BlockHeight: 16,
 	}
 	if env, err = system.LoadEnv(opts); err != nil {
 		return
@@ -244,6 +259,12 @@ func Init(system *twodee.System) (state *State, err error) {
 	state.screenxmax = 0
 	state.screenymin = float32(-state.env.Height + state.window.Height)
 	state.screenymax = 0
+
+	state.textscore = system.NewText("font1-textures", 0, 0, 4, "")
+	state.textfps = system.NewText("font1-textures", 0, float32(state.window.Height - 16), 1, "")
+	state.hud.AddChild(state.textscore)
+	state.hud.AddChild(state.textfps)
+	state.SetScore(0)
 	state.running = true
 	return
 }
@@ -257,11 +278,11 @@ func main() {
 	Check(err)
 	tick := time.Now()
 	for state.Running() {
-		ms := Min(float32(time.Since(tick))/float32(time.Millisecond), 0.01)
-		state.CheckKeys(ms)
-		state.Update(ms)
+		us := Min(float32(time.Since(tick))/float32(time.Microsecond), 1)
+		state.CheckKeys(us)
+		state.Update(us)
 		state.UpdateViewport()
-		state.Paint(ms)
+		state.Paint(us)
 		tick = time.Now()
 	}
 }
