@@ -85,11 +85,11 @@ func (s *State) HandleKeys(key, state int) {
 	}
 }
 
-func (s *State) CheckKeys(us float32) {
-	var speed float32 = 20
-	var minspeed float32 = 5
-	var accel float32 = 0.01 * us
-	var decel float32 = 0.5 * us
+func (s *State) CheckKeys(ms float32) {
+	var speed float32 = 1.3
+	var minspeed float32 = 0.05
+	var accel float32 = 0.001 * ms
+	var decel float32 = 0.005 * ms
 	switch {
 	case s.system.Key(twodee.KeyUp) == 1 && s.system.Key(twodee.KeyDown) == 0:
 		s.char.VelocityY = -speed
@@ -114,12 +114,12 @@ func (s *State) CheckKeys(us float32) {
 	}
 }
 
-func (s *State) Update(us float32) {
-	s.textfps.SetText(fmt.Sprintf("%6.0f FPS", (1000000.0 / us)))
+func (s *State) Update(ms float32) {
+	s.textfps.SetText(fmt.Sprintf("FPS %-5.1f", (1000.0 / ms)))
 
-	s.char.VelocityY += 5
-	dX := Round(s.char.VelocityX * us)
-	dY := Round(s.char.VelocityY * us)
+	s.char.VelocityY += 0.3
+	dX := Round(s.char.VelocityX * ms)
+	dY := Round(s.char.VelocityY * ms)
 	for _, b := range s.boundaries {
 		if dX != 0 && !s.char.TestMove(dX, 0, b) {
 			if s.char.TestMove(dX, float32(-b.Height), b) {
@@ -268,7 +268,7 @@ func Init(system *twodee.System) (state *State, err error) {
 	// Do this later so that the hud renders last
 	state.scene.AddChild(state.hud)
 	state.textscore = system.NewText("font1-textures", 0, 0, 4, "")
-	state.textfps = system.NewText("font1-textures", 0, float32(state.window.Height - 16), 1, "")
+	state.textfps = system.NewText("font1-textures", 0, float32(state.window.Height - 32), 2, "")
 	state.hud.AddChild(state.textscore)
 	state.hud.AddChild(state.textfps)
 	state.hud.Z = 0.5
@@ -286,11 +286,13 @@ func main() {
 	Check(err)
 	tick := time.Now()
 	for state.Running() {
-		us := Min(float32(time.Since(tick))/float32(time.Microsecond), 1)
-		state.CheckKeys(us)
-		state.Update(us)
-		state.UpdateViewport()
-		state.Paint(us)
+		elapsed := time.Since(tick)
+		//fmt.Printf("Elapsed: %v\n", float32(elapsed) / float32(time.Millisecond))
 		tick = time.Now()
+		ms := Min(float32(elapsed) / float32(time.Millisecond), 50)
+		state.CheckKeys(ms)
+		state.Update(ms)
+		state.UpdateViewport()
+		state.Paint(ms)
 	}
 }
