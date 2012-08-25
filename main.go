@@ -19,6 +19,7 @@ import (
 	"github.com/kurrik/twodee"
 	"image/color"
 	"os"
+	"time"
 )
 
 func Check(err error) {
@@ -29,12 +30,17 @@ func Check(err error) {
 }
 
 type State struct {
-	system  *twodee.System
-	scene   *twodee.Scene
-	env     *twodee.Env
-	window  *twodee.Window
-	char    *twodee.Sprite
-	running bool
+	system     *twodee.System
+	scene      *twodee.Scene
+	env        *twodee.Env
+	window     *twodee.Window
+	char       *twodee.Sprite
+	running    bool
+	boundaries []*twodee.Sprite
+	screenxmin float32
+	screenxmax float32
+	screenymin float32
+	screenymax float32
 }
 
 func (s *State) HandleKeys(key, state int) {
@@ -45,38 +51,55 @@ func (s *State) HandleKeys(key, state int) {
 }
 
 func (s *State) CheckKeys() {
-	var keystep float32 = 32
-	if s.system.Key(twodee.KeyUp) == 1 {
-		s.char.Y -= keystep
+	var speed float32 = 2048
+	switch {
+	case s.system.Key(twodee.KeyUp) == 1 && s.system.Key(twodee.KeyDown) == 0:
+		s.char.VelocityY = -speed
+	case s.system.Key(twodee.KeyUp) == 0 && s.system.Key(twodee.KeyDown) == 1:
+		//s.char.VelocityY = speed
 	}
-	if s.system.Key(twodee.KeyDown) == 1 {
-		s.char.Y += keystep
+	switch {
+	case s.system.Key(twodee.KeyLeft) == 1 && s.system.Key(twodee.KeyRight) == 0:
+		s.char.VelocityX = -speed
+	case s.system.Key(twodee.KeyLeft) == 0 && s.system.Key(twodee.KeyRight) == 1:
+		s.char.VelocityX = speed
+	default:
+		s.char.VelocityX = 0
 	}
-	if s.system.Key(twodee.KeyLeft) == 1 {
-		s.char.X -= keystep
+}
+
+func (s *State) Update(ms float32) {
+	s.char.VelocityY += 128
+	dX := s.char.VelocityX * ms
+	dY := s.char.VelocityY * ms
+	for _, b := range s.boundaries {
+		if dX != 0 && !s.char.TestMove(dX, 0, b) {
+			dX = 0
+			s.char.VelocityX = 0
+		}
+		if dY != 0 && !s.char.TestMove(0, dY, b) {
+			dY = 0
+			s.char.VelocityY = 0
+		}
 	}
-	if s.system.Key(twodee.KeyRight) == 1 {
-		s.char.X += keystep
-	}
+	s.char.X += dX
+	s.char.Y += dY
+}
+
+func (s *State) UpdateViewport() {
 	s.env.X = 0 - s.char.X + (float32(s.window.Width) / 2)
 	s.env.Y = 0 - s.char.Y + (float32(s.window.Height) / 2)
-	var (
-		leftbound = float32(-s.env.Width + s.window.Width)
-		rightbound = float32(0.0)
-		topbound = float32(-s.env.Height + s.window.Height)
-		bottombound = float32(0.0)
-	)
-	if s.env.X < leftbound {
-		s.env.X = leftbound
+	if s.env.X < s.screenxmin {
+		s.env.X = s.screenxmin
 	}
-	if s.env.X > rightbound {
-		s.env.X = rightbound
+	if s.env.X > s.screenxmax {
+		s.env.X = s.screenxmax
 	}
-	if s.env.Y < topbound {
-		s.env.Y = topbound
+	if s.env.Y < s.screenymin {
+		s.env.Y = s.screenymin
 	}
-	if s.env.Y > bottombound {
-		s.env.Y = bottombound
+	if s.env.Y > s.screenymax {
+		s.env.Y = s.screenymax
 	}
 }
 
@@ -88,6 +111,9 @@ func (s *State) HandleAddBlock(sprite *twodee.Sprite, block *twodee.EnvBlock) {
 		s.char.X = sprite.X
 		s.char.Y = sprite.Y - 64
 		sprite.Parent().AddChild(s.char)
+		fallthrough
+	case FLOOR:
+		s.boundaries = append(s.boundaries, sprite)
 	}
 }
 
@@ -103,6 +129,7 @@ func Init(system *twodee.System) (state *State, err error) {
 		opts     twodee.EnvOpts
 	)
 	state = &State{}
+	state.boundaries = make([]*twodee.Sprite, 0)
 	state.scene = &twodee.Scene{}
 	state.window = &twodee.Window{
 		Width:  640,
@@ -129,7 +156,7 @@ func Init(system *twodee.System) (state *State, err error) {
 				Color:      color.RGBA{153, 102, 0, 255},
 				Type:       FLOOR,
 				FrameIndex: 1,
-				Handler:    nil,
+				Handler:    BlockHandler,
 			},
 			&twodee.EnvBlock{
 				Color:      color.RGBA{0, 0, 0, 255},
@@ -151,6 +178,10 @@ func Init(system *twodee.System) (state *State, err error) {
 	state.env = env
 	state.scene.AddChild(env)
 	state.system.SetKeyCallback(func(k, s int) { state.HandleKeys(k, s) })
+	state.screenxmin = float32(-state.env.Width + state.window.Width)
+	state.screenxmax = 0
+	state.screenymin = float32(-state.env.Height + state.window.Height)
+	state.screenymax = 0
 	state.running = true
 	return
 }
@@ -170,8 +201,13 @@ func main() {
 
 	state, err := Init(system)
 	Check(err)
+	tick := time.Now()
 	for state.Running() {
+		ms := float32(time.Since(tick)) / float32(time.Millisecond)
 		state.CheckKeys()
+		state.Update(ms)
+		state.UpdateViewport()
 		state.Paint()
+		tick = time.Now()
 	}
 }
