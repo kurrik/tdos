@@ -33,6 +33,7 @@ func main() {
 		system *twodee.System
 		window *twodee.Window
 		scene  *twodee.Scene
+		env    *twodee.Environment
 	)
 	system, err = twodee.Init()
 	Check(err)
@@ -46,17 +47,26 @@ func main() {
 	err = system.Open(window)
 	Check(err)
 
-	textures := map[string]string{}
+	textures := map[string]string{
+		"level-textures": "assets/level-textures.png",
+	}
 	for name, path := range textures {
 		err = system.LoadTexture(name, path, twodee.IntNearest)
 		Check(err)
 	}
 
 	scene = &twodee.Scene{}
-
+	env, err = system.LoadEnvironment("level-textures", "assets/level-fw.png")
+	Check(err)
+	scene.AddChild(env)
 	run := true
+	var keystep float32 = 32.0
 	for run {
 		system.Paint(scene)
+		if system.Key(twodee.KeyUp) == 1 { env.Y -= keystep }
+		if system.Key(twodee.KeyDown) == 1 { env.Y += keystep }
+		if system.Key(twodee.KeyLeft) == 1 { env.X -= keystep }
+		if system.Key(twodee.KeyRight) == 1 { env.X += keystep }
 		run = system.Key(twodee.KeyEsc) == 0 && window.Opened()
 	}
 }
