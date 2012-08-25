@@ -9,8 +9,9 @@ Tasks
 * Load a level and construct a scene (DONE)
 * Actor class for monsters, player (DONE)
 * Player controls (DONE)
-* Collision detection
-* Timer
+* Collision detection (DONE)
+* Timer (DONE)
+* Screen overlay
 * Physics
 * Better sprites
 * Monsters
