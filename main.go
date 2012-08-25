@@ -29,6 +29,25 @@ func Check(err error) {
 	}
 }
 
+func Min(a float32, b float32) float32 {
+	if a < b { return a }
+	return b
+}
+
+func Max(a float32, b float32) float32 {
+	if a < b { return b }
+	return a
+}
+
+func Abs(a float32) float32 {
+	if a < 0 { return -a }
+	return a
+}
+
+func Round(a float32) float32 {
+	return float32(int32(a + 0.5))
+}
+
 type State struct {
 	system     *twodee.System
 	scene      *twodee.Scene
@@ -50,8 +69,11 @@ func (s *State) HandleKeys(key, state int) {
 	}
 }
 
-func (s *State) CheckKeys() {
-	var speed float32 = 2048
+func (s *State) CheckKeys(ms float32) {
+	var speed float32 = 4000
+	var minspeed float32 = 2000
+	var accel float32 = 40000 * ms
+	var decel float32 = 2 * accel
 	switch {
 	case s.system.Key(twodee.KeyUp) == 1 && s.system.Key(twodee.KeyDown) == 0:
 		s.char.VelocityY = -speed
@@ -60,30 +82,48 @@ func (s *State) CheckKeys() {
 	}
 	switch {
 	case s.system.Key(twodee.KeyLeft) == 1 && s.system.Key(twodee.KeyRight) == 0:
-		s.char.VelocityX = -speed
+		s.char.VelocityX = Max(-speed, Min(-minspeed, s.char.VelocityX - accel))
 	case s.system.Key(twodee.KeyLeft) == 0 && s.system.Key(twodee.KeyRight) == 1:
-		s.char.VelocityX = speed
+		s.char.VelocityX = Min(speed, Max(minspeed, s.char.VelocityX + accel))
 	default:
-		s.char.VelocityX = 0
+		if Abs(s.char.VelocityX) <= decel {
+			s.char.VelocityX = 0
+		} else {
+			if s.char.VelocityX > 0 {
+				s.char.VelocityX -= decel
+			} else {
+				s.char.VelocityX += decel
+			}
+		}
 	}
 }
 
 func (s *State) Update(ms float32) {
-	s.char.VelocityY += 128
-	dX := s.char.VelocityX * ms
-	dY := s.char.VelocityY * ms
+	s.char.VelocityY += 500
+	dX := Round(s.char.VelocityX * ms)
+	dY := Round(s.char.VelocityY * ms)
 	for _, b := range s.boundaries {
 		if dX != 0 && !s.char.TestMove(dX, 0, b) {
-			dX = 0
+			if dX < 0 {
+				s.char.X = b.X + float32(b.Width)
+			} else {
+				s.char.X = b.X - float32(s.char.Width)
+			}
 			s.char.VelocityX = 0
+			dX = 0
 		}
 		if dY != 0 && !s.char.TestMove(0, dY, b) {
-			dY = 0
+			if dY < 0 {
+				s.char.Y = b.Y + float32(b.Height)
+			} else {
+				s.char.Y = b.Y - float32(s.char.Height)
+			}
 			s.char.VelocityY = 0
+			dY = 0
 		}
 	}
-	s.char.X += dX
-	s.char.Y += dY
+	s.char.X = Round(s.char.X + dX)
+	s.char.Y = Round(s.char.Y + dY)
 }
 
 func (s *State) UpdateViewport() {
@@ -109,7 +149,7 @@ func (s *State) HandleAddBlock(sprite *twodee.Sprite, block *twodee.EnvBlock) {
 		s.char = s.system.NewSprite("char-textures", 0, 0, 32, 64, 4)
 		s.char.Frame = 2
 		s.char.X = sprite.X
-		s.char.Y = sprite.Y - 64
+		s.char.Y = sprite.Y - 100
 		sprite.Parent().AddChild(s.char)
 		fallthrough
 	case FLOOR:
@@ -203,8 +243,8 @@ func main() {
 	Check(err)
 	tick := time.Now()
 	for state.Running() {
-		ms := float32(time.Since(tick)) / float32(time.Millisecond)
-		state.CheckKeys()
+		ms := Min(float32(time.Since(tick)) / float32(time.Millisecond), 0.01)
+		state.CheckKeys(ms)
 		state.Update(ms)
 		state.UpdateViewport()
 		state.Paint()
