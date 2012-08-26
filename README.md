@@ -23,7 +23,7 @@ Tasks
 * Death animation (DONE)
 * Tune controls (DONE)
 * Ending? (DONE)
-* Don't jump forever
+* Don't jump forever (DONE)
 * Enemies spawn others
 * Bigger map
 * Music
