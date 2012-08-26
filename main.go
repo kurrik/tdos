@@ -181,6 +181,8 @@ type Player struct {
 	NextFrame    time.Time
 	FrameCounter int
 	Animations   map[int]*Animation
+	StartX       float32
+	StartY       float32
 }
 
 func (s *State) NewPlayer(x float32, y float32) (p *Player) {
@@ -204,10 +206,12 @@ func (s *State) NewPlayer(x float32, y float32) (p *Player) {
 		LastState:    PLAYER_STOPPED | FACING_RIGHT,
 		NextFrame:    time.Now(),
 		Animations:   a,
+		StartX:       x,
+		StartY:       y,
 		FrameCounter: 0,
-		JumpSpeed:    0.8,
-		WalkSpeed:    0.05,
-		RunSpeed:     0.8,
+		JumpSpeed:    0.6,
+		WalkSpeed:    0.03,
+		RunSpeed:     0.6,
 		Acceleration: 0.001,
 		Deceleration: 0.001,
 	}
@@ -216,8 +220,17 @@ func (s *State) NewPlayer(x float32, y float32) (p *Player) {
 	return p
 }
 
+func (p *Player) Respawn() {
+	p.Sprite.Collide = true
+	p.Sprite.VelocityY = 0
+	p.Sprite.VelocityX = 0
+	p.Sprite.MoveTo(twodee.Pt(p.StartX, p.StartY))
+}
+
 func (p *Player) Die() {
 	p.Sprite.Collide = false
+	p.Sprite.VelocityY = -p.JumpSpeed * 1.5
+	p.Sprite.VelocityX = 0
 }
 
 func (p *Player) Jump() {
@@ -255,12 +268,12 @@ func (p *Player) Slow(ms float32) {
 }
 
 func (p *Player) Rebound(c *Creature) {
-	if c.Sprite.X() > p.Sprite.X() {
+	if c.Sprite.X() >= p.Sprite.X() {
 		p.Sprite.VelocityX = -p.RunSpeed
 	} else {
 		p.Sprite.VelocityX = p.RunSpeed
 	}
-	if c.Sprite.Y() > p.Sprite.Y() {
+	if c.Sprite.Y() >= p.Sprite.Y() {
 		p.Sprite.VelocityY = -p.JumpSpeed
 	} else {
 		p.Sprite.VelocityY = p.JumpSpeed
@@ -268,7 +281,7 @@ func (p *Player) Rebound(c *Creature) {
 }
 
 func (p *Player) Bounce(c *Creature) {
-	if c.Sprite.Y() > p.Sprite.Y() {
+	if c.Sprite.Y() >= p.Sprite.Y() {
 		p.Sprite.VelocityY = -p.JumpSpeed
 	} else {
 		p.Sprite.VelocityY = p.JumpSpeed
@@ -462,7 +475,7 @@ func (s *State) Visible(sprite *twodee.Sprite) bool {
 }
 
 func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
-	sprite.VelocityY += 0.2 // Gravity
+	sprite.VelocityY += 0.005 * ms // Gravity
 	var (
 		dX = sprite.VelocityX * ms
 		dY = sprite.VelocityY * ms
@@ -537,20 +550,21 @@ func (s *State) IsKillShot(c *Creature) bool {
 func (s *State) Update(ms float32) {
 	s.textfps.SetText(fmt.Sprintf("FPS %-5.1f", (1000.0 / ms)))
 	for _, c := range s.creatures {
-		if s.player.Sprite.CollidesWith(c.Sprite) {
-			if s.IsKillShot(c) {
-				s.SetScore(s.Score() + c.Points)
-				fmt.Println("Kill")
-				s.KillCreature(c)
-				s.player.Bounce(c)
-			} else {
-				health := s.ChangeHealth(-1)
-				if health == 0 {
-					s.player.Die()
-					s.ChangeLives(-1)
-					s.ChangeHealth(s.healthbar.Max())
+		if s.player.Sprite.Collide {
+			if s.player.Sprite.CollidesWith(c.Sprite) {
+				if s.IsKillShot(c) {
+					s.SetScore(s.Score() + c.Points)
+					fmt.Println("Kill")
+					s.KillCreature(c)
+					s.player.Bounce(c)
+				} else {
+					health := s.ChangeHealth(-1)
+					if health == 0 {
+						s.player.Die()
+					} else {
+						s.player.Rebound(c)
+					}
 				}
-				s.player.Rebound(c)
 			}
 		}
 		if s.Visible(c.Sprite) {
@@ -560,6 +574,15 @@ func (s *State) Update(ms float32) {
 	}
 	s.player.Update(ms)
 	s.UpdateSprite(s.player.Sprite, ms)
+
+	var b = s.player.Sprite.RelativeBounds(s.env)
+	if b.Max.Y > s.env.Height() + 1000 {
+		//Player has fallen off the map
+		s.ChangeLives(-1)
+		s.ChangeHealth(s.healthbar.Max())
+		s.player.Respawn()
+		s.UpdateViewport(0)
+	}
 }
 
 func (s *State) UpdateViewport(ms float32) {
@@ -579,12 +602,15 @@ func (s *State) UpdateViewport(ms float32) {
 		fmt.Printf("s.char.RelativeBounds(s.env) %v\n", s.char.RelativeBounds(s.env))
 		fmt.Printf("Moving viewport to %v, %v\n", x, y)
 	*/
-	if ms == 0 || (dy < 1 && dy > -1) {
-		s.env.MoveTo(twodee.Pt(x, y))
-		return
-	}
-	if dy < 200 && dy > -200 {
-		d.Y /= 10
+	if s.player.Sprite.Collide {
+		// Only smooth motion if the player isn't dying
+		if ms == 0 || (dy < 1 && dy > -1) {
+			s.env.MoveTo(twodee.Pt(x, y))
+			return
+		}
+		if dy < 200 && dy > -200 {
+			d.Y /= 10
+		}
 	}
 	s.env.Move(d)
 }
