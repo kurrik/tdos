@@ -19,9 +19,9 @@ import (
 	"github.com/kurrik/twodee"
 	"image/color"
 	"math"
+	"math/rand"
 	"os"
 	"time"
-	"math/rand"
 )
 
 const (
@@ -33,7 +33,7 @@ const (
 )
 
 const (
-	DEBUG = true
+	DEBUG = false
 )
 
 func Check(err error) {
@@ -660,7 +660,7 @@ func (s *State) UpdateViewport(ms float32) {
 		b  = s.env.RelativeBounds(s.player.Sprite)
 		v  = s.window.View
 		x  = Min(Max(b.Min.X+v.Dx()/2, s.screenxmin), s.screenxmax)
-		y  = Min(Max(b.Min.Y+v.Dy()/2, s.screenymin), s.screenymax)
+		y  = Min(Max(b.Min.Y+v.Dy()/2-s.player.Sprite.Height()/2, s.screenymin), s.screenymax)
 		dy = y - s.env.Y()
 		dx = x - s.env.X()
 		d  = twodee.Pt(dx/r, dy/r)
@@ -677,11 +677,14 @@ func (s *State) UpdateViewport(ms float32) {
 			s.env.MoveTo(twodee.Pt(x, y))
 			return
 		}
-		if dy < 200 && dy > -200 {
-			d.Y /= 10
+		if dy > 0 {
+			d.Y = Max(1, dy/30)
+		} else {
+			d.Y = Min(-1, dy/30)
 		}
 	}
 	s.env.Move(d)
+	s.env.MoveTo(twodee.Pt(Round(s.env.X()), Round(s.env.Y())))
 }
 
 func (s *State) HandleAddBlock(block *twodee.EnvBlock, sprite *twodee.Sprite, x float32, y float32) {
@@ -872,12 +875,12 @@ func InitSplash(system *twodee.System, window *twodee.Window, frame int) (splash
 		scene:   &twodee.Scene{},
 	}
 	system.SetKeyCallback(func(k, s int) {
-		threshold := time.Duration(1) * time.Second
+		threshold := time.Duration(500) * time.Millisecond
 		if time.Now().After(splash.started.Add(threshold)) {
 			splash.running = false
 		}
 	})
-	splash.sprite = system.NewSprite("splash", 0, 0, 320, 240, 0)
+	splash.sprite = system.NewSprite("splash", 0, 0, int(window.View.Dx()), int(window.View.Dy()), 0)
 	splash.sprite.SetFrame(frame)
 	splash.scene.AddChild(splash.sprite)
 	splash.started = time.Now()
@@ -908,8 +911,8 @@ func main() {
 	defer system.Terminate()
 
 	window = &twodee.Window{
-		Width:  640,
-		Height: 480,
+		Width:  800,
+		Height: 600,
 		Title:  "TDoS",
 	}
 	system.Open(window)
