@@ -426,7 +426,7 @@ func (s *State) Visible(sprite *twodee.Sprite) bool {
 	var (
 		wb     = s.window.View.Sub(s.env.Bounds().Min)
 		sb     = sprite.RelativeBounds(s.env)
-		buffer = float32(32)
+		buffer = float32(512)
 	)
 	wb.Min.X -= buffer
 	wb.Min.Y -= buffer
@@ -493,7 +493,7 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 	if dX != 0 || dY != 0 {
 		sprite.Move(twodee.Pt(dX, dY))
 	}
-	sprite.MoveTo(twodee.Pt(Round(sprite.X()), Round(sprite.Y())))
+	//sprite.MoveTo(twodee.Pt(Round(sprite.X()), Round(sprite.Y())))
 	return
 }
 
