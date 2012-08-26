@@ -70,37 +70,55 @@ func Round(a float32) float32 {
 
 type LivesBar struct {
 	twodee.Element
-	used   int
-	lives  int
+	avail int
+	max   int
+	Availframe int
+	Emptyframe int
 	system *twodee.System
 }
 
-func NewLivesBar(system *twodee.System, lives int, used int) *LivesBar {
+func NewLivesBar(system *twodee.System, avail int, max int) *LivesBar {
 	bar := &LivesBar{
-		used:   used,
-		lives:  lives,
+		avail:   avail,
+		max: max,
 		system: system,
+		Availframe: 0,
+		Emptyframe: 1,
 	}
 	bar.Render()
 	return bar
 }
 
-func (l *LivesBar) SetUsed(used int) {
-	l.used = used
+func (l *LivesBar) SetAvailable(avail int) int {
+	if avail > l.max {
+		avail = l.max
+	}
+	if avail < 0 {
+		avail = 0
+	}
+	l.avail = avail
 	l.Render()
+	return avail
 }
 
-func (l *LivesBar) Used() int {
-	return l.used
+func (l *LivesBar) Available() int {
+	return l.avail
 }
 
-func (l *LivesBar) SetLives(lives int) {
-	l.lives = lives
+func (l *LivesBar) SetMax(max int) int {
+	if max < 0 {
+		max = 0
+	}
+	if l.avail > max {
+		l.avail = max
+	}
+	l.max = max
 	l.Render()
+	return max
 }
 
-func (l *LivesBar) Lives() int {
-	return l.lives
+func (l *LivesBar) Max() int {
+	return l.max
 }
 
 func (l *LivesBar) Render() {
@@ -108,22 +126,22 @@ func (l *LivesBar) Render() {
 	var (
 		x  int             = 0
 		t  *twodee.Texture = l.system.Textures["powerups-textures"]
-		w0 int             = 2 * (t.Frames[0][1] - t.Frames[0][0])
-		w1 int             = 2 * (t.Frames[1][1] - t.Frames[1][0])
+		we int             = 2 * (t.Frames[l.Emptyframe][1] - t.Frames[l.Emptyframe][0])
+		wa int             = 2 * (t.Frames[l.Availframe][1] - t.Frames[l.Availframe][0])
 		h  int             = 2 * t.Height
 		y  float32         = -24
 	)
-	for i := 0; i < l.used; i++ {
-		s := l.system.NewSprite("powerups-textures", float32(x), y, w1, h, 0)
-		s.SetFrame(1)
+	for i := 0; i < l.avail; i++ {
+		s := l.system.NewSprite("powerups-textures", float32(x), y, wa, h, 0)
+		s.SetFrame(l.Availframe)
 		l.AddChild(s)
-		x += w1
+		x += wa + 2
 	}
-	for i := 0; i < l.lives; i++ {
-		s := l.system.NewSprite("powerups-textures", float32(x), y, w0, h, 0)
-		s.SetFrame(0)
+	for i := l.avail; i < l.max; i++ {
+		s := l.system.NewSprite("powerups-textures", float32(x), y, we, h, 0)
+		s.SetFrame(l.Emptyframe)
 		l.AddChild(s)
-		x += w0
+		x += we + 2
 	}
 }
 
@@ -345,6 +363,7 @@ type State struct {
 	window     *twodee.Window
 	player     *Player
 	livesbar   *LivesBar
+	healthbar  *LivesBar
 	running    bool
 	score      int
 	nextlife   int
@@ -368,20 +387,22 @@ func (s *State) KillCreature(c *Creature) {
 
 }
 
-func (s *State) AddLife() {
-	var (
-		lives = s.livesbar.Lives()
-	)
-	s.livesbar.SetLives(lives + 1)
+func (s *State) SetMaxHealth(health int) {
+	s.healthbar.SetMax(health)
 }
 
-func (s *State) LoseLife() {
-	var (
-		lives = s.livesbar.Lives()
-		used  = s.livesbar.Used()
-	)
-	s.livesbar.SetLives(lives - 1)
-	s.livesbar.SetUsed(used + 1)
+func (s *State) ChangeHealth(change int) int {
+	var health = s.healthbar.SetAvailable(s.healthbar.Available() + change)
+	return health
+}
+
+func (s *State) ChangeMaxLives(i int) {
+	s.livesbar.SetMax(i)
+}
+
+func (s *State) ChangeLives(i int) int {
+	var lives = s.livesbar.SetAvailable(s.livesbar.Available() + i)
+	return lives
 }
 
 func (s *State) SetScore(score int) {
@@ -389,7 +410,7 @@ func (s *State) SetScore(score int) {
 	s.textscore.SetText(fmt.Sprintf("%v", s.score))
 	s.textscore.MoveTo(twodee.Pt(s.window.View.Max.X-s.textscore.Width(), 0))
 	if s.score >= s.nextlife {
-		s.AddLife()
+		s.ChangeMaxLives(1)
 		s.nextlife *= 2
 	}
 }
@@ -516,7 +537,11 @@ func (s *State) Update(ms float32) {
 				s.KillCreature(c)
 				s.player.Bounce(c)
 			} else {
-				s.LoseLife()
+				health := s.ChangeHealth(-1)
+				if health == 0 {
+					s.ChangeLives(-1)
+					s.ChangeHealth(s.healthbar.Max())
+				}
 				s.player.Rebound(c)
 			}
 		}
@@ -698,15 +723,26 @@ func Init(system *twodee.System, window *twodee.Window) (state *State, err error
 	// Do this later so that the hud renders on top of things
 	state.scene.AddChild(state.hud)
 	state.livesbar = NewLivesBar(system, 0, 0)
-	state.textscore = system.NewText("font1-textures", 0, 0, 2, "")
-	state.textfps = system.NewText("font1-textures", 0, float32(state.window.View.Max.Y-32), 1, "")
 	state.hud.AddChild(state.livesbar)
+
+	state.healthbar = NewLivesBar(system, 0, 0)
+	state.healthbar.Availframe = 3
+	state.healthbar.Emptyframe = 2
+	state.healthbar.MoveTo(twodee.Pt(0, 24))
+	state.hud.AddChild(state.healthbar)
+
+	state.textscore = system.NewText("font1-textures", 0, 0, 2, "")
 	state.hud.AddChild(state.textscore)
+
+	state.textfps = system.NewText("font1-textures", 0, float32(state.window.View.Max.Y-32), 1, "")
 	state.hud.AddChild(state.textfps)
 	state.hud.SetZ(0.5)
 	state.nextlife = 100
 	state.SetScore(0)
-	state.AddLife()
+	state.ChangeMaxLives(1)
+	state.ChangeLives(1)
+	state.SetMaxHealth(3)
+	state.ChangeHealth(3)
 	state.running = true
 	return
 }
