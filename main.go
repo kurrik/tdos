@@ -503,7 +503,7 @@ func (s *State) UpdateViewport(ms float32) {
 		fmt.Printf("s.char.RelativeBounds(s.env) %v\n", s.char.RelativeBounds(s.env))
 		fmt.Printf("Moving viewport to %v, %v\n", x, y)
 	*/
-	if ms == 0 {
+	if ms == 0 || (dy < 1 && dy > -1){
 		s.env.MoveTo(twodee.Pt(x, y))
 		return
 	}
