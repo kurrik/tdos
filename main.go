@@ -68,6 +68,65 @@ func Round(a float32) float32 {
 	return float32(math.Floor(float64(a)))
 }
 
+type LivesBar struct {
+	twodee.Element
+	used   int
+	lives  int
+	system *twodee.System
+}
+
+func NewLivesBar(system *twodee.System, lives int, used int) *LivesBar {
+	bar := &LivesBar{
+		used:   used,
+		lives:  lives,
+		system: system,
+	}
+	bar.Render()
+	return bar
+}
+
+func (l *LivesBar) SetUsed(used int) {
+	l.used = used
+	l.Render()
+}
+
+func (l *LivesBar) Used() int {
+	return l.used
+}
+
+func (l *LivesBar) SetLives(lives int) {
+	l.lives = lives
+	l.Render()
+}
+
+func (l *LivesBar) Lives() int {
+	return l.lives
+}
+
+func (l *LivesBar) Render() {
+	l.Clear()
+	var (
+		x  int             = 0
+		t  *twodee.Texture = l.system.Textures["powerups-textures"]
+		w0 int             = 2 * (t.Frames[0][1] - t.Frames[0][0])
+		w1 int             = 2 * (t.Frames[1][1] - t.Frames[1][0])
+		h  int             = 2 * t.Height
+		y  float32         = -24
+	)
+	for i := 0; i < l.used; i++ {
+		s := l.system.NewSprite("powerups-textures", float32(x), y, w1, h, 0)
+		s.SetFrame(1)
+		l.AddChild(s)
+		x += w1
+	}
+	for i := 0; i < l.lives; i++ {
+		s := l.system.NewSprite("powerups-textures", float32(x), y, w0, h, 0)
+		s.SetFrame(0)
+		l.AddChild(s)
+		x += w0
+	}
+}
+
 type Creature struct {
 	Sprite *twodee.Sprite
 	Speed  float32
@@ -83,8 +142,10 @@ type State struct {
 	env        *twodee.Env
 	window     *twodee.Window
 	char       *twodee.Sprite
+	livesbar   *LivesBar
 	running    bool
 	score      int
+	nextlife   int
 	boundaries []*twodee.Sprite
 	creatures  []*Creature
 	screenxmin float32
@@ -123,10 +184,30 @@ func (s *State) KillCreature(c *Creature) {
 
 }
 
+func (s *State) AddLife() {
+	var (
+		lives = s.livesbar.Lives()
+	)
+	s.livesbar.SetLives(lives + 1)
+}
+
+func (s *State) LoseLife() {
+	var (
+		lives = s.livesbar.Lives()
+		used  = s.livesbar.Used()
+	)
+	s.livesbar.SetLives(lives - 1)
+	s.livesbar.SetUsed(used + 1)
+}
+
 func (s *State) SetScore(score int) {
 	s.score = score
 	s.textscore.SetText(fmt.Sprintf("%v", s.score))
 	s.textscore.MoveTo(twodee.Pt(s.window.View.Max.X-s.textscore.Width(), 0))
+	if s.score >= s.nextlife {
+		s.AddLife()
+		s.nextlife *= 2
+	}
 }
 
 func (s *State) Score() int {
@@ -260,6 +341,10 @@ func (s *State) Update(ms float32) {
 				fmt.Println("Kill")
 				s.KillCreature(c)
 				s.char.VelocityY *= -1.2
+			} else {
+				s.LoseLife()
+				s.char.VelocityY = -1
+				s.char.VelocityX = -1
 			}
 		}
 		if s.Visible(c.Sprite) {
@@ -306,8 +391,8 @@ func (s *State) HandleAddBlock(block *twodee.EnvBlock, sprite *twodee.Sprite, x 
 	switch block.Type {
 	case START:
 		var (
-			tex = s.system.Textures["darwin-textures"]
-			width = (tex.Frames[0][1] - tex.Frames[0][0]) * 2
+			tex    = s.system.Textures["darwin-textures"]
+			width  = (tex.Frames[0][1] - tex.Frames[0][0]) * 2
 			height = tex.Height * 2
 		)
 		s.char = s.system.NewSprite("darwin-textures", x, y-float32(height), width, height, PLAYER)
@@ -361,6 +446,7 @@ func Init(system *twodee.System) (state *State, err error) {
 		TexInfo{"char-textures", "assets/char-textures.png", 16},
 		TexInfo{"font1-textures", "assets/font1-textures.png", 0},
 		TexInfo{"darwin-textures", "assets/darwin-textures.png", 0},
+		TexInfo{"powerups-textures", "assets/powerups-textures-fw.png", 0},
 	}
 	for _, t := range textures {
 		if err = system.LoadTexture(t.Name, t.Path, twodee.IntNearest, t.Width); err != nil {
@@ -415,12 +501,16 @@ func Init(system *twodee.System) (state *State, err error) {
 
 	// Do this later so that the hud renders last
 	state.scene.AddChild(state.hud)
+	state.livesbar = NewLivesBar(system, 0, 0)
 	state.textscore = system.NewText("font1-textures", 0, 0, 2, "")
 	state.textfps = system.NewText("font1-textures", 0, float32(state.window.View.Max.Y-32), 1, "")
+	state.hud.AddChild(state.livesbar)
 	state.hud.AddChild(state.textscore)
 	state.hud.AddChild(state.textfps)
 	state.hud.SetZ(0.5)
+	state.nextlife = 100
 	state.SetScore(0)
+	state.AddLife()
 	state.running = true
 	return
 }
