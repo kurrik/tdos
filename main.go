@@ -65,6 +65,7 @@ func Round(a float32) float32 {
 type Creature struct {
 	Sprite *twodee.Sprite
 	Speed  float32
+	Points int
 }
 
 type State struct {
@@ -90,6 +91,10 @@ func (s *State) SetScore(score int) {
 	s.score = score
 	s.textscore.SetText(fmt.Sprintf("%v", s.score))
 	s.textscore.MoveTo(twodee.Pt(s.window.View.Max.X-s.textscore.Width(), 0))
+}
+
+func (s *State) Score() int {
+	return s.score
 }
 
 func (s *State) HandleKeys(key, state int) {
@@ -205,6 +210,7 @@ func (s *State) Update(ms float32) {
 	for _, c := range s.creatures {
 		if s.char.CollidesWith(c.Sprite) {
 			if s.IsKillShot(c) {
+				s.SetScore(s.Score() + c.Points)
 				fmt.Println("Kill")
 			}
 		}
@@ -250,6 +256,7 @@ func (s *State) HandleAddBlock(env *twodee.Env, block *twodee.EnvBlock, sprite *
 		badguy := &Creature{
 			Sprite: s.system.NewSprite("char-textures", x, y-64, 32, 64, BADGUY),
 			Speed:  0.1,
+			Points: 100,
 		}
 		badguy.Sprite.SetFrame(1)
 		badguy.Sprite.VelocityX = -badguy.Speed
