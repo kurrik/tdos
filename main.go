@@ -127,6 +127,144 @@ func (l *LivesBar) Render() {
 	}
 }
 
+const (
+	PLAYER_LEFT = 1 << iota
+	PLAYER_RIGHT = 1 << iota
+	PLAYER_STOPPED = 1 << iota
+	PLAYER_WALKING = 1 << iota
+	PLAYER_JUMPING = 1 << iota
+)
+
+type Animation struct {
+	Frames   []int
+	Duration time.Duration
+}
+
+func Anim(frames []int, ms int) *Animation {
+	return &Animation{
+		Frames:   frames,
+		Duration: time.Duration(ms) * time.Millisecond,
+	}
+}
+
+func (a *Animation) Len() int {
+	return len(a.Frames)
+}
+
+type Player struct {
+	Sprite       *twodee.Sprite
+	State        int
+	LastState    int
+	JumpSpeed    float32
+	WalkSpeed    float32
+	RunSpeed     float32
+	Acceleration float32
+	Deceleration float32
+	NextFrame    time.Time
+	FrameCounter int
+	Animations   map[int]*Animation
+}
+
+func (s *State) NewPlayer(x float32, y float32) (p *Player) {
+	var (
+		texture = s.system.Textures["darwin-textures"]
+		width   = (texture.Frames[0][1] - texture.Frames[0][0]) * 2
+		height  = texture.Height * 2
+		starty  = y - float32(height)
+	)
+	a := map[int]*Animation{
+		PLAYER_STOPPED | PLAYER_LEFT:  Anim([]int{4,5}, 400),
+		PLAYER_STOPPED | PLAYER_RIGHT: Anim([]int{0,1}, 400),
+		PLAYER_WALKING | PLAYER_LEFT:  Anim([]int{3,5}, 80),
+		PLAYER_WALKING | PLAYER_RIGHT: Anim([]int{0,2}, 80),
+		PLAYER_JUMPING | PLAYER_LEFT:  Anim([]int{5}, 80),
+		PLAYER_JUMPING | PLAYER_RIGHT: Anim([]int{0}, 80),
+	}
+	p = &Player{
+		Sprite:       s.system.NewSprite("darwin-textures", x, starty, width, height, PLAYER),
+		State:        PLAYER_STOPPED | PLAYER_RIGHT,
+		LastState:    PLAYER_STOPPED | PLAYER_RIGHT,
+		NextFrame:    time.Now(),
+		Animations:   a,
+		FrameCounter: 0,
+		JumpSpeed:    0.8,
+		WalkSpeed:    0.05,
+		RunSpeed:     0.8,
+		Acceleration: 0.001,
+		Deceleration: 0.001,
+	}
+	p.Sprite.SetFrame(0)
+	return p
+}
+
+func (p *Player) Jump() {
+	p.Sprite.VelocityY = -p.JumpSpeed
+	p.State &= 511 ^ (PLAYER_STOPPED | PLAYER_JUMPING)
+	p.State |= (PLAYER_JUMPING)
+}
+
+func (p *Player) Left(ms float32) {
+	var v = p.Sprite.VelocityX - p.Acceleration*ms
+	p.Sprite.VelocityX = Max(-p.RunSpeed, Min(-p.WalkSpeed, v))
+	p.State &= 511 ^ (PLAYER_RIGHT | PLAYER_STOPPED | PLAYER_JUMPING)
+	p.State |= (PLAYER_LEFT | PLAYER_WALKING)
+}
+
+func (p *Player) Right(ms float32) {
+	var v = p.Sprite.VelocityX + p.Acceleration*ms
+	p.Sprite.VelocityX = Min(p.RunSpeed, Max(p.WalkSpeed, v))
+	p.State &= 511 ^ (PLAYER_LEFT | PLAYER_STOPPED | PLAYER_JUMPING)
+	p.State |= (PLAYER_RIGHT | PLAYER_WALKING)
+}
+
+func (p *Player) Slow(ms float32) {
+	if Abs(p.Sprite.VelocityX) <= p.Deceleration*ms {
+		p.Sprite.VelocityX = 0
+		p.State &= 511 ^ (PLAYER_WALKING | PLAYER_JUMPING)
+		p.State |= PLAYER_STOPPED
+	} else {
+		if p.Sprite.VelocityX > 0 {
+			p.Sprite.VelocityX -= p.Deceleration * ms
+		} else {
+			p.Sprite.VelocityX += p.Deceleration * ms
+		}
+	}
+}
+
+func (p *Player) Rebound(c *Creature) {
+	if c.Sprite.X() > p.Sprite.X() {
+		p.Sprite.VelocityX = -p.RunSpeed
+	} else {
+		p.Sprite.VelocityX = p.RunSpeed
+	}
+	if c.Sprite.Y() > p.Sprite.Y() {
+		p.Sprite.VelocityY = -p.JumpSpeed
+	} else {
+		p.Sprite.VelocityY = p.JumpSpeed
+	}
+}
+
+func (p *Player) Bounce(c *Creature) {
+	if c.Sprite.Y() > p.Sprite.Y() {
+		p.Sprite.VelocityY = -p.JumpSpeed
+	} else {
+		p.Sprite.VelocityY = p.JumpSpeed
+	}
+	p.Sprite.VelocityX = 0
+}
+
+func (p *Player) Update(ms float32) {
+	if time.Now().After(p.NextFrame) || p.LastState != p.State {
+		if anim, ok := p.Animations[p.State]; ok {
+			i := p.FrameCounter % anim.Len()
+			p.Sprite.SetFrame(anim.Frames[i])
+			p.NextFrame = time.Now().Add(anim.Duration)
+		}
+		p.FrameCounter = (p.FrameCounter + 1) % 1000
+		p.LastState = p.State
+	}
+}
+
 type Creature struct {
 	Sprite *twodee.Sprite
 	Speed  float32
@@ -141,7 +279,7 @@ type State struct {
 	textfps    *twodee.Text
 	env        *twodee.Env
 	window     *twodee.Window
-	char       *twodee.Sprite
+	player     *Player
 	livesbar   *LivesBar
 	running    bool
 	score      int
@@ -222,31 +360,19 @@ func (s *State) HandleKeys(key, state int) {
 }
 
 func (s *State) CheckKeys(ms float32) {
-	var speed float32 = 0.8
-	var minspeed float32 = 0.05
-	var accel float32 = 0.001 * ms
-	var decel float32 = 0.005 * ms
 	switch {
 	case s.system.Key(twodee.KeyUp) == 1 && s.system.Key(twodee.KeyDown) == 0:
-		s.char.VelocityY = -speed
+		s.player.Jump()
 	case s.system.Key(twodee.KeyUp) == 0 && s.system.Key(twodee.KeyDown) == 1:
 		//s.char.VelocityY = speed
 	}
 	switch {
 	case s.system.Key(twodee.KeyLeft) == 1 && s.system.Key(twodee.KeyRight) == 0:
-		s.char.VelocityX = Max(-speed, Min(-minspeed, s.char.VelocityX-accel))
+		s.player.Left(ms)
 	case s.system.Key(twodee.KeyLeft) == 0 && s.system.Key(twodee.KeyRight) == 1:
-		s.char.VelocityX = Min(speed, Max(minspeed, s.char.VelocityX+accel))
+		s.player.Right(ms)
 	default:
-		if Abs(s.char.VelocityX) <= decel {
-			s.char.VelocityX = 0
-		} else {
-			if s.char.VelocityX > 0 {
-				s.char.VelocityX -= decel
-			} else {
-				s.char.VelocityX += decel
-			}
-		}
+		s.player.Slow(ms)
 	}
 }
 
@@ -326,8 +452,8 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 func (s *State) IsKillShot(c *Creature) bool {
 	var (
 		buffery  = float32(c.Sprite.Height()) / 2
-		downward = s.char.VelocityY > 0
-		hitshead = s.char.Y()+float32(s.char.Height())-c.Sprite.Y() < buffery
+		downward = s.player.Sprite.VelocityY > 0
+		hitshead = s.player.Sprite.Y()+float32(s.player.Sprite.Height())-c.Sprite.Y() < buffery
 	)
 	return downward && hitshead
 }
@@ -335,16 +461,15 @@ func (s *State) IsKillShot(c *Creature) bool {
 func (s *State) Update(ms float32) {
 	s.textfps.SetText(fmt.Sprintf("FPS %-5.1f", (1000.0 / ms)))
 	for _, c := range s.creatures {
-		if s.char.CollidesWith(c.Sprite) {
+		if s.player.Sprite.CollidesWith(c.Sprite) {
 			if s.IsKillShot(c) {
 				s.SetScore(s.Score() + c.Points)
 				fmt.Println("Kill")
 				s.KillCreature(c)
-				s.char.VelocityY *= -1.2
+				s.player.Bounce(c)
 			} else {
 				s.LoseLife()
-				s.char.VelocityY = -1
-				s.char.VelocityX = -1
+				s.player.Rebound(c)
 			}
 		}
 		if s.Visible(c.Sprite) {
@@ -357,13 +482,14 @@ func (s *State) Update(ms float32) {
 			}
 		}
 	}
-	s.UpdateSprite(s.char, ms)
+	s.player.Update(ms)
+	s.UpdateSprite(s.player.Sprite, ms)
 }
 
 func (s *State) UpdateViewport(ms float32) {
 	var (
 		r  = 0.1 * ms
-		b  = s.env.RelativeBounds(s.char)
+		b  = s.env.RelativeBounds(s.player.Sprite)
 		v  = s.window.View
 		x  = Min(Max(b.Min.X+v.Dx()/2, s.screenxmin), s.screenxmax)
 		y  = Min(Max(b.Min.Y+v.Dy()/2, s.screenymin), s.screenymax)
@@ -390,14 +516,8 @@ func (s *State) UpdateViewport(ms float32) {
 func (s *State) HandleAddBlock(block *twodee.EnvBlock, sprite *twodee.Sprite, x float32, y float32) {
 	switch block.Type {
 	case START:
-		var (
-			tex    = s.system.Textures["darwin-textures"]
-			width  = (tex.Frames[0][1] - tex.Frames[0][0]) * 2
-			height = tex.Height * 2
-		)
-		s.char = s.system.NewSprite("darwin-textures", x, y-float32(height), width, height, PLAYER)
-		s.char.SetFrame(0)
-		s.env.AddChild(s.char)
+		s.player = s.NewPlayer(x, y)
+		s.env.AddChild(s.player.Sprite)
 		fallthrough
 	case FLOOR:
 		s.boundaries = append(s.boundaries, sprite)
