@@ -841,7 +841,7 @@ func Init(system *twodee.System, window *twodee.Window) (state *State, err error
 	state.textfps = system.NewText("font1-textures", 0, float32(state.window.View.Max.Y-32), 1, "")
 	state.hud.AddChild(state.textfps)
 	state.hud.SetZ(0.5)
-	state.nextlife = 100
+	state.nextlife = 400
 	state.SetScore(0)
 	state.ChangeMaxLives(1)
 	state.ChangeLives(1)
