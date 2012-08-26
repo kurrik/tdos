@@ -16,9 +16,15 @@ Tasks
 * Monsters (DONE)
 * Collisions (DONE)
 * Points (DONE)
-* Death
-* 1ups
-* Better sprites
+* Death (DONE)
+* 1ups (DONE)
+* Better sprites (DONE)
+* Hit points
+* Death animation
+* Don't jump forever
+* Enemies spawn others
+* Tune controls
+* Music
 * Parallax
 
 Bugs
