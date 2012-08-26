@@ -313,8 +313,12 @@ func (c *Creature) Update(result int, ms float32) {
 	}
 	switch {
 	case result&HITRIGHT == HITRIGHT:
+		c.State &= 511 ^ (FACING_RIGHT)
+		c.State |= (FACING_LEFT)
 		c.Sprite.VelocityX = -c.Speed
 	case result&HITLEFT == HITLEFT:
+		c.State &= 511 ^ (FACING_LEFT)
+		c.State |= (FACING_RIGHT)
 		c.Sprite.VelocityX = c.Speed
 	}
 }
@@ -326,7 +330,7 @@ func (s *State) NewMushroom(x float32, y float32) *Creature {
 	c.Points = 100
 	c.Animations = map[int]*Animation{
 		FACING_LEFT:  Anim([]int{0, 1}, 120),
-		FACING_RIGHT: Anim([]int{0, 1}, 120),
+		FACING_RIGHT: Anim([]int{2, 3}, 120),
 	}
 	return c
 }
@@ -420,9 +424,14 @@ func (s *State) CheckKeys(ms float32) {
 
 func (s *State) Visible(sprite *twodee.Sprite) bool {
 	var (
-		wb = s.window.View.Sub(s.env.Bounds().Min)
-		sb = sprite.RelativeBounds(s.env)
+		wb     = s.window.View.Sub(s.env.Bounds().Min)
+		sb     = sprite.RelativeBounds(s.env)
+		buffer = float32(512)
 	)
+	wb.Min.X -= buffer
+	wb.Min.Y -= buffer
+	wb.Max.X += buffer
+	wb.Max.X += buffer
 	return sb.Overlaps(wb)
 }
 
@@ -434,11 +443,14 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 		b  = sprite.RelativeBounds(s.env)
 	)
 	if b.Min.X+dX < 0 {
+		fmt.Printf("HITLEFT\n")
 		result |= HITLEFT
 		sprite.VelocityX = 0
+		sprite.Move(twodee.Pt(1,0))
 		dX = 0
 	}
 	if b.Max.X+dX > s.env.Width() {
+		fmt.Printf("HITRIGHT\n")
 		/*
 			fmt.Printf("HITRIGHT\n")
 			fmt.Printf("sprite.RelativeBounds(s.env) %v\n", sprite.RelativeBounds(s.env))
@@ -446,6 +458,7 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 		*/
 		result |= HITRIGHT
 		sprite.VelocityX = 0
+		sprite.Move(twodee.Pt(-1,0))
 		dX = 0
 	}
 	for _, block := range s.boundaries {
@@ -579,20 +592,15 @@ type TexInfo struct {
 	Width int
 }
 
-func Init(system *twodee.System) (state *State, err error) {
+func Init(system *twodee.System, window *twodee.Window) (state *State, err error) {
 	state = &State{}
 	state.creatures = make([]*Creature, 0)
 	state.boundaries = make([]*twodee.Sprite, 0)
 	state.hud = &twodee.Scene{}
 	state.scene = &twodee.Scene{}
 	state.env = &twodee.Env{}
-	state.window = &twodee.Window{
-		Width:  640,
-		Height: 480,
-		Title:  "TDoS",
-	}
+	state.window = window
 	state.system = system
-	state.system.Open(state.window)
 	textures := []TexInfo{
 		TexInfo{"level-textures", "assets/level-textures.png", 16},
 		TexInfo{"enemy-textures", "assets/enemy-textures-fw.png", 0},
@@ -687,7 +695,7 @@ func Init(system *twodee.System) (state *State, err error) {
 	state.screenymin = float32(-state.env.Height()) + state.window.View.Max.Y
 	state.screenymax = 0
 
-	// Do this later so that the hud renders last
+	// Do this later so that the hud renders on top of things
 	state.scene.AddChild(state.hud)
 	state.livesbar = NewLivesBar(system, 0, 0)
 	state.textscore = system.NewText("font1-textures", 0, 0, 2, "")
@@ -703,12 +711,60 @@ func Init(system *twodee.System) (state *State, err error) {
 	return
 }
 
+type Splash struct {
+	running bool
+	window *twodee.Window
+	system *twodee.System
+	scene *twodee.Scene
+	sprite *twodee.Sprite
+}
+
+func InitSplash(system *twodee.System, window *twodee.Window) (splash *Splash, err error) {
+	if system.LoadTexture("splash", "assets/splash-fw.png", twodee.IntNearest, 320); err != nil {
+		return
+	}
+	splash = &Splash{
+		running: true,
+		window: window,
+		system: system,
+		scene: &twodee.Scene{},
+	}
+	system.SetKeyCallback(func(k, s int) {
+		splash.running = false
+	})
+	splash.sprite = system.NewSprite("splash", 0, 0, 320, 240, 0)
+	splash.scene.AddChild(splash.sprite)
+	return
+}
+
+func (s *Splash) Running() bool {
+	return s.running && s.window.Opened()
+}
+
+func (s *Splash) Paint() {
+	s.system.Paint(s.scene)
+}
+
+
 func main() {
 	system, err := twodee.Init()
 	Check(err)
 	defer system.Terminate()
 
-	state, err := Init(system)
+	window := &twodee.Window{
+		Width:  640,
+		Height: 480,
+		Title:  "TDoS",
+	}
+	system.Open(window)
+
+	splash, err := InitSplash(system, window)
+	Check(err)
+	for splash.Running() {
+		splash.Paint()
+	}
+
+	state, err := Init(system, window)
 	Check(err)
 	tick := time.Now()
 	state.UpdateViewport(0)
