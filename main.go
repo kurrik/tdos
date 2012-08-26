@@ -31,6 +31,10 @@ const (
 	OK        = 1 << iota
 )
 
+const (
+	DEBUG = true
+)
+
 func Check(err error) {
 	if err != nil {
 		fmt.Printf("[error]: %v\n", err)
@@ -70,18 +74,18 @@ func Round(a float32) float32 {
 
 type LivesBar struct {
 	twodee.Element
-	avail int
-	max   int
+	avail      int
+	max        int
 	Availframe int
 	Emptyframe int
-	system *twodee.System
+	system     *twodee.System
 }
 
 func NewLivesBar(system *twodee.System, avail int, max int) *LivesBar {
 	bar := &LivesBar{
-		avail:   avail,
-		max: max,
-		system: system,
+		avail:      avail,
+		max:        max,
+		system:     system,
 		Availframe: 0,
 		Emptyframe: 1,
 	}
@@ -318,16 +322,16 @@ type Creature struct {
 	Animations   map[int]*Animation
 }
 
-func (s *State) NewCreature(x float32, y float32) (c *Creature) {
+func (s *State) NewCreature(t string, x float32, y float32) (c *Creature) {
 	var (
-		texture = s.system.Textures["enemy-textures"]
+		texture = s.system.Textures[t]
 		width   = (texture.Frames[0][1] - texture.Frames[0][0]) * 2
 		height  = texture.Height * 2
 		starty  = y - float32(height)
 	)
 	a := map[int]*Animation{}
 	c = &Creature{
-		Sprite:       s.system.NewSprite("enemy-textures", x, starty, width, height, BADGUY),
+		Sprite:       s.system.NewSprite(t, x, starty, width, height, BADGUY),
 		State:        FACING_LEFT,
 		LastState:    FACING_RIGHT,
 		NextFrame:    time.Now(),
@@ -365,10 +369,22 @@ func (c *Creature) Update(result int, ms float32) {
 }
 
 func (s *State) NewMushroom(x float32, y float32) *Creature {
-	c := s.NewCreature(x, y)
+	c := s.NewCreature("enemy-textures", x, y)
 	c.Speed = 0.05
 	c.JumpSpeed = 0.8
 	c.Points = 100
+	c.Animations = map[int]*Animation{
+		FACING_LEFT:  Anim([]int{0, 1}, 120),
+		FACING_RIGHT: Anim([]int{2, 3}, 120),
+	}
+	return c
+}
+
+func (s *State) NewSmallMushroom(x float32, y float32) *Creature {
+	c := s.NewCreature("enemy-sm-textures", x, y)
+	c.Speed = 0.07
+	c.JumpSpeed = 0.8
+	c.Points = 250
 	c.Animations = map[int]*Animation{
 		FACING_LEFT:  Anim([]int{0, 1}, 120),
 		FACING_RIGHT: Anim([]int{2, 3}, 120),
@@ -493,7 +509,7 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 	if b.Min.X+dX < 0 {
 		result |= HITLEFT
 		sprite.VelocityX = 0
-		sprite.Move(twodee.Pt(1,0))
+		sprite.Move(twodee.Pt(1, 0))
 		dX = 0
 	}
 	if b.Max.X+dX > s.env.Width() {
@@ -504,7 +520,7 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 		*/
 		result |= HITRIGHT
 		sprite.VelocityX = 0
-		sprite.Move(twodee.Pt(-1,0))
+		sprite.Move(twodee.Pt(-1, 0))
 		dX = 0
 	}
 	if sprite.Collide {
@@ -555,7 +571,9 @@ func (s *State) IsKillShot(c *Creature) bool {
 }
 
 func (s *State) Update(ms float32) {
-	s.textfps.SetText(fmt.Sprintf("FPS %-5.1f", (1000.0 / ms)))
+	if DEBUG {
+		s.textfps.SetText(fmt.Sprintf("FPS %-5.1f", (1000.0 / ms)))
+	}
 	for _, c := range s.creatures {
 		if s.player.Sprite.Collide {
 			if s.player.Sprite.CollidesWith(c.Sprite) {
@@ -582,7 +600,7 @@ func (s *State) Update(ms float32) {
 	s.player.Update(result, ms)
 
 	var b = s.player.Sprite.RelativeBounds(s.env)
-	if b.Max.Y > s.env.Height() + 1000 {
+	if b.Max.Y > s.env.Height()+1000 {
 		//Player has fallen off the map
 		lives := s.ChangeLives(-1)
 		if lives > 0 {
@@ -676,6 +694,7 @@ func Init(system *twodee.System, window *twodee.Window) (state *State, err error
 	state.system = system
 	textures := []TexInfo{
 		TexInfo{"level-textures", "assets/level-textures.png", 16},
+		TexInfo{"enemy-sm-textures", "assets/enemy-sm-textures-fw.png", 0},
 		TexInfo{"enemy-textures", "assets/enemy-textures-fw.png", 0},
 		TexInfo{"font1-textures", "assets/font1-textures.png", 0},
 		TexInfo{"darwin-textures", "assets/darwin-textures.png", 0},
@@ -798,10 +817,10 @@ func Init(system *twodee.System, window *twodee.Window) (state *State, err error
 
 type Splash struct {
 	running bool
-	window *twodee.Window
-	system *twodee.System
-	scene *twodee.Scene
-	sprite *twodee.Sprite
+	window  *twodee.Window
+	system  *twodee.System
+	scene   *twodee.Scene
+	sprite  *twodee.Sprite
 	started time.Time
 }
 
@@ -811,9 +830,9 @@ func InitSplash(system *twodee.System, window *twodee.Window, frame int) (splash
 	}
 	splash = &Splash{
 		running: true,
-		window: window,
-		system: system,
-		scene: &twodee.Scene{},
+		window:  window,
+		system:  system,
+		scene:   &twodee.Scene{},
 	}
 	system.SetKeyCallback(func(k, s int) {
 		threshold := time.Duration(1) * time.Second
@@ -840,25 +859,32 @@ func (s *Splash) Paint() {
 	s.system.Paint(s.scene)
 }
 
-
 func main() {
-	system, err := twodee.Init()
+	var (
+		splash *Splash
+		system *twodee.System
+		window *twodee.Window
+		err    error
+	)
+	system, err = twodee.Init()
 	Check(err)
 	defer system.Terminate()
 
-	window := &twodee.Window{
+	window = &twodee.Window{
 		Width:  640,
 		Height: 480,
 		Title:  "TDoS",
 	}
 	system.Open(window)
 
-	splash, err := InitSplash(system, window, 0)
-	Check(err)
-	for splash.Running() {
-		splash.Paint()
+	if !DEBUG {
+		splash, err = InitSplash(system, window, 0)
+		Check(err)
+		for splash.Running() {
+			splash.Paint()
+		}
+		splash = nil
 	}
-	splash = nil
 
 	state, err := Init(system, window)
 	Check(err)
@@ -875,14 +901,15 @@ func main() {
 		state.Paint(ms)
 	}
 
-	frame := 1
-	if state.Victory {
-		frame = 2
+	if !DEBUG {
+		frame := 1
+		if state.Victory {
+			frame = 2
+		}
+		splash, err = InitSplash(system, window, frame)
+		Check(err)
+		for splash.Running() {
+			splash.Paint()
+		}
 	}
-	splash, err = InitSplash(system, window, frame)
-	Check(err)
-	for splash.Running() {
-		splash.Paint()
-	}
-
 }
