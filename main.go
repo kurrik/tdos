@@ -21,6 +21,7 @@ import (
 	"math"
 	"os"
 	"time"
+	"math/rand"
 )
 
 const (
@@ -233,7 +234,7 @@ func (p *Player) Respawn() {
 
 func (p *Player) Die() {
 	p.Sprite.Collide = false
-	p.Sprite.VelocityY = -p.JumpSpeed * 1.5
+	p.Sprite.VelocityY = -p.JumpSpeed
 	p.Sprite.VelocityX = 0
 }
 
@@ -310,8 +311,14 @@ func (p *Player) Update(result int, ms float32) {
 	}
 }
 
+const (
+	MUSHROOM = iota
+	SMALL_MUSHROOM
+)
+
 type Creature struct {
 	Sprite       *twodee.Sprite
+	Type         int
 	Points       int
 	State        int
 	LastState    int
@@ -320,9 +327,10 @@ type Creature struct {
 	NextFrame    time.Time
 	FrameCounter int
 	Animations   map[int]*Animation
+	LastSpawn    time.Time
 }
 
-func (s *State) NewCreature(t string, x float32, y float32) (c *Creature) {
+func (s *State) NewCreature(t string, x float32, y float32, z int) (c *Creature) {
 	var (
 		texture = s.system.Textures[t]
 		width   = (texture.Frames[0][1] - texture.Frames[0][0]) * 2
@@ -332,9 +340,11 @@ func (s *State) NewCreature(t string, x float32, y float32) (c *Creature) {
 	a := map[int]*Animation{}
 	c = &Creature{
 		Sprite:       s.system.NewSprite(t, x, starty, width, height, BADGUY),
+		Type:         z,
 		State:        FACING_LEFT,
 		LastState:    FACING_RIGHT,
 		NextFrame:    time.Now(),
+		LastSpawn:    time.Now(),
 		Animations:   a,
 		FrameCounter: 0,
 		JumpSpeed:    0.8,
@@ -366,12 +376,20 @@ func (c *Creature) Update(result int, ms float32) {
 		c.State |= (FACING_RIGHT)
 		c.Sprite.VelocityX = c.Speed
 	}
+	if diff := Abs(c.Sprite.VelocityX) - c.Speed; diff != 0 {
+		damp := diff / 10
+		if c.Sprite.VelocityX > 0 {
+			c.Sprite.VelocityX -= damp
+		} else {
+			c.Sprite.VelocityX += damp
+		}
+	}
 }
 
 func (s *State) NewMushroom(x float32, y float32) *Creature {
-	c := s.NewCreature("enemy-textures", x, y)
+	c := s.NewCreature("enemy-textures", x, y, MUSHROOM)
 	c.Speed = 0.05
-	c.JumpSpeed = 0.8
+	c.JumpSpeed = 0.1
 	c.Points = 100
 	c.Animations = map[int]*Animation{
 		FACING_LEFT:  Anim([]int{0, 1}, 120),
@@ -381,9 +399,9 @@ func (s *State) NewMushroom(x float32, y float32) *Creature {
 }
 
 func (s *State) NewSmallMushroom(x float32, y float32) *Creature {
-	c := s.NewCreature("enemy-sm-textures", x, y)
-	c.Speed = 0.07
-	c.JumpSpeed = 0.8
+	c := s.NewCreature("enemy-sm-textures", x, y, SMALL_MUSHROOM)
+	c.Speed = 0.08
+	c.JumpSpeed = 0.3
 	c.Points = 250
 	c.Animations = map[int]*Animation{
 		FACING_LEFT:  Anim([]int{0, 1}, 120),
@@ -437,7 +455,7 @@ func (s *State) ChangeHealth(change int) int {
 }
 
 func (s *State) ChangeMaxLives(i int) {
-	s.livesbar.SetMax(i)
+	s.livesbar.SetMax(s.livesbar.Max() + i)
 }
 
 func (s *State) ChangeLives(i int) int {
@@ -454,6 +472,7 @@ func (s *State) SetScore(score int) {
 	s.textscore.MoveTo(twodee.Pt(s.window.View.Max.X-s.textscore.Width(), 0))
 	if s.score >= s.nextlife {
 		s.ChangeMaxLives(1)
+		s.ChangeLives(1)
 		s.nextlife *= 2
 	}
 }
@@ -594,8 +613,26 @@ func (s *State) Update(ms float32) {
 		if s.Visible(c.Sprite) {
 			result := s.UpdateSprite(c.Sprite, ms)
 			c.Update(result, ms)
+			switch c.Type {
+			case MUSHROOM:
+				thresh := time.Duration(5) * time.Second
+				if time.Now().After(c.LastSpawn.Add(thresh)) {
+					if rand.Float32() > 0.95 {
+						c2 := s.NewSmallMushroom(c.Sprite.X(), c.Sprite.Y())
+						c2.Sprite.VelocityX *= rand.Float32() * 2.0
+						if rand.Float32() > 0.5 {
+							c2.Sprite.VelocityX *= -1
+						}
+						c2.Sprite.VelocityY = -c2.JumpSpeed
+						s.creatures = append(s.creatures, c2)
+						s.env.AddChild(c2.Sprite)
+						c.LastSpawn = time.Now()
+					}
+				}
+			}
 		}
 	}
+
 	result := s.UpdateSprite(s.player.Sprite, ms)
 	s.player.Update(result, ms)
 
