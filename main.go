@@ -459,15 +459,51 @@ func Init(system *twodee.System) (state *State, err error) {
 	opts := twodee.EnvOpts{
 		Blocks: []*twodee.EnvBlock{
 			&twodee.EnvBlock{
-				Color:      color.RGBA{153, 102, 0, 255},
+				Color:      color.RGBA{153, 102, 0, 255}, // Dirt
 				Type:       FLOOR,
 				FrameIndex: 0,
 				Handler:    BlockHandler,
 			},
 			&twodee.EnvBlock{
-				Color:      color.RGBA{0, 204, 51, 255},
+				Color:      color.RGBA{0, 204, 51, 255}, // Green top
 				Type:       FLOOR,
 				FrameIndex: 1,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
+				Color:      color.RGBA{51, 102, 0, 255}, // Top left corner
+				Type:       FLOOR,
+				FrameIndex: 2,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
+				Color:      color.RGBA{51, 153, 0, 255}, // Top right corner
+				Type:       FLOOR,
+				FrameIndex: 3,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
+				Color:      color.RGBA{153, 153, 51, 255}, // Left dirt wall
+				Type:       FLOOR,
+				FrameIndex: 4,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
+				Color:      color.RGBA{153, 153, 102, 255}, // Right dirt wall
+				Type:       FLOOR,
+				FrameIndex: 5,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
+				Color:      color.RGBA{204, 204, 51, 255}, // Left grass cap
+				Type:       FLOOR,
+				FrameIndex: 6,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
+				Color:      color.RGBA{204, 204, 102, 255}, // Right grass cap
+				Type:       FLOOR,
+				FrameIndex: 7,
 				Handler:    BlockHandler,
 			},
 			&twodee.EnvBlock{
