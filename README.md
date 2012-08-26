@@ -24,6 +24,8 @@ Tasks
 * Don't jump forever
 * Enemies spawn others
 * Tune controls
+* Bigger map
+* Ending?
 * Music
 * Parallax
 
