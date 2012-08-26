@@ -18,6 +18,7 @@ import (
 	"fmt"
 	"github.com/kurrik/twodee"
 	"image/color"
+	"math"
 	"os"
 	"time"
 )
@@ -59,7 +60,12 @@ func Abs(a float32) float32 {
 }
 
 func Round(a float32) float32 {
-	return float32(int32(a + 0.5))
+	if a > 0 {
+		a += 0.5
+	} else {
+		a -= 0.5
+	}
+	return float32(math.Floor(float64(a)))
 }
 
 type Creature struct {
@@ -87,6 +93,36 @@ type State struct {
 	screenymax float32
 }
 
+func (s *State) SpawnCreature(t int, x float32, y float32) {
+	var (
+		c *Creature
+	)
+	switch t {
+	case BADGUY:
+		c = &Creature{
+			Sprite: s.system.NewSprite("char-textures", x, y-64, 32, 64, t),
+			Speed:  0.1,
+			Points: 100,
+		}
+	}
+	c.Sprite.SetFrame(1)
+	c.Sprite.VelocityX = -c.Speed
+	s.creatures = append(s.creatures, c)
+	s.env.AddChild(c.Sprite)
+}
+
+func (s *State) KillCreature(c *Creature) {
+	for i, d := range s.creatures {
+		if d == c {
+			s.creatures = append(s.creatures[:i], s.creatures[i+1:]...)
+			break
+		}
+	}
+	s.env.RemoveChild(c.Sprite)
+	return
+
+}
+
 func (s *State) SetScore(score int) {
 	s.score = score
 	s.textscore.SetText(fmt.Sprintf("%v", s.score))
@@ -105,7 +141,7 @@ func (s *State) HandleKeys(key, state int) {
 }
 
 func (s *State) CheckKeys(ms float32) {
-	var speed float32 = 1.3
+	var speed float32 = 0.8
 	var minspeed float32 = 0.05
 	var accel float32 = 0.001 * ms
 	var decel float32 = 0.005 * ms
@@ -142,11 +178,12 @@ func (s *State) Visible(sprite *twodee.Sprite) bool {
 }
 
 func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
-	sprite.VelocityY += 0.3 // Gravity
+	sprite.VelocityY += 0.2 // Gravity
 	var (
-		dX = sprite.VelocityX * ms
-		dY = sprite.VelocityY * ms
-		b  = sprite.RelativeBounds(s.env)
+		dX    = sprite.VelocityX * ms
+		dY    = sprite.VelocityY * ms
+		b     = sprite.RelativeBounds(s.env)
+		moved = false
 	)
 	if b.Min.X+dX < 0 {
 		result |= HITLEFT
@@ -168,6 +205,7 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 			if sprite.TestMove(dX, -block.Height(), block) {
 				// Allows running up small bumps
 				sprite.Move(twodee.Pt(0, -block.Height()))
+				moved = true
 			} else {
 				if dX < 0 {
 					sprite.MoveTo(twodee.Pt(block.X()+block.Width(), sprite.Y()))
@@ -176,6 +214,7 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 					sprite.MoveTo(twodee.Pt(block.X()-sprite.Width(), sprite.Y()))
 					result |= HITRIGHT
 				}
+				moved = true
 				sprite.VelocityX = 0
 				dX = 0
 			}
@@ -188,11 +227,18 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 				sprite.MoveTo(twodee.Pt(sprite.X(), block.Y()-sprite.Height()))
 				result |= HITBOTTOM
 			}
+			moved = true
 			sprite.VelocityY = 0
 			dY = 0
 		}
 	}
-	sprite.Move(twodee.Pt(dX, dY))
+	if dX != 0 || dY != 0 {
+		sprite.Move(twodee.Pt(dX, dY))
+		moved = true
+	}
+	if moved {
+		sprite.MoveTo(twodee.Pt(Round(sprite.X()), Round(sprite.Y())))
+	}
 	return
 }
 
@@ -212,6 +258,8 @@ func (s *State) Update(ms float32) {
 			if s.IsKillShot(c) {
 				s.SetScore(s.Score() + c.Points)
 				fmt.Println("Kill")
+				s.KillCreature(c)
+				s.char.VelocityY *= -1.2
 			}
 		}
 		if s.Visible(c.Sprite) {
@@ -227,12 +275,16 @@ func (s *State) Update(ms float32) {
 	s.UpdateSprite(s.char, ms)
 }
 
-func (s *State) UpdateViewport() {
+func (s *State) UpdateViewport(ms float32) {
 	var (
-		b = s.env.RelativeBounds(s.char)
-		v = s.window.View
-		x = Min(Max(b.Min.X+v.Dx()/2, s.screenxmin), s.screenxmax)
-		y = Min(Max(b.Min.Y+v.Dy()/2, s.screenymin), s.screenymax)
+		r  = 0.1 * ms
+		b  = s.env.RelativeBounds(s.char)
+		v  = s.window.View
+		x  = Min(Max(b.Min.X+v.Dx()/2, s.screenxmin), s.screenxmax)
+		y  = Min(Max(b.Min.Y+v.Dy()/2, s.screenymin), s.screenymax)
+		dy = y - s.env.Y()
+		dx = x - s.env.X()
+		d  = twodee.Pt(dx/r, dy/r)
 	)
 	/*
 		fmt.Printf("Bounds %v\n", s.char.GlobalBounds())
@@ -240,28 +292,28 @@ func (s *State) UpdateViewport() {
 		fmt.Printf("s.char.RelativeBounds(s.env) %v\n", s.char.RelativeBounds(s.env))
 		fmt.Printf("Moving viewport to %v, %v\n", x, y)
 	*/
-	s.env.MoveTo(twodee.Pt(x, y))
+	if ms == 0 {
+		s.env.MoveTo(twodee.Pt(x, y))
+		return
+	}
+	if dy < 200 && dy > -200 {
+		d.Y /= 10
+	}
+	s.env.Move(d)
 }
 
-func (s *State) HandleAddBlock(env *twodee.Env, block *twodee.EnvBlock, sprite *twodee.Sprite, x float32, y float32) {
+func (s *State) HandleAddBlock(block *twodee.EnvBlock, sprite *twodee.Sprite, x float32, y float32) {
 	switch block.Type {
 	case START:
 		s.char = s.system.NewSprite("char-textures", x, y-100, 32, 64, PLAYER)
 		s.char.SetFrame(2)
-		env.AddChild(s.char)
+		s.char.SetZ(0.4)
+		s.env.AddChild(s.char)
 		fallthrough
 	case FLOOR:
 		s.boundaries = append(s.boundaries, sprite)
 	case BADGUY:
-		badguy := &Creature{
-			Sprite: s.system.NewSprite("char-textures", x, y-64, 32, 64, BADGUY),
-			Speed:  0.1,
-			Points: 100,
-		}
-		badguy.Sprite.SetFrame(1)
-		badguy.Sprite.VelocityX = -badguy.Speed
-		s.creatures = append(s.creatures, badguy)
-		env.AddChild(badguy.Sprite)
+		s.SpawnCreature(block.Type, x, y)
 	}
 }
 
@@ -287,15 +339,12 @@ type TexInfo struct {
 }
 
 func Init(system *twodee.System) (state *State, err error) {
-	var (
-		env  *twodee.Env
-		opts twodee.EnvOpts
-	)
 	state = &State{}
 	state.creatures = make([]*Creature, 0)
 	state.boundaries = make([]*twodee.Sprite, 0)
 	state.hud = &twodee.Scene{}
 	state.scene = &twodee.Scene{}
+	state.env = &twodee.Env{}
 	state.window = &twodee.Window{
 		Width:  640,
 		Height: 480,
@@ -313,10 +362,10 @@ func Init(system *twodee.System) (state *State, err error) {
 			return
 		}
 	}
-	BlockHandler := func(env *twodee.Env, block *twodee.EnvBlock, sprite *twodee.Sprite, x float32, y float32) {
-		state.HandleAddBlock(env, block, sprite, x, y)
+	BlockHandler := func(block *twodee.EnvBlock, sprite *twodee.Sprite, x float32, y float32) {
+		state.HandleAddBlock(block, sprite, x, y)
 	}
-	opts = twodee.EnvOpts{
+	opts := twodee.EnvOpts{
 		Blocks: []*twodee.EnvBlock{
 			&twodee.EnvBlock{
 				Color:      color.RGBA{153, 102, 0, 255},
@@ -348,12 +397,11 @@ func Init(system *twodee.System) (state *State, err error) {
 		BlockWidth:  16,
 		BlockHeight: 16,
 	}
-	if env, err = system.LoadEnv(opts); err != nil {
+	if err = state.env.Load(system, opts); err != nil {
 		return
 	}
 	state.system.SetClearColor(102, 204, 255, 255)
-	state.env = env
-	state.scene.AddChild(env)
+	state.scene.AddChild(state.env)
 	state.system.SetKeyCallback(func(k, s int) { state.HandleKeys(k, s) })
 	state.screenxmin = float32(-state.env.Width()) + state.window.View.Max.X
 	state.screenxmax = 0
@@ -380,6 +428,7 @@ func main() {
 	state, err := Init(system)
 	Check(err)
 	tick := time.Now()
+	state.UpdateViewport(0)
 	for state.Running() {
 		elapsed := time.Since(tick)
 		//fmt.Printf("Elapsed: %v\n", float32(elapsed) / float32(time.Millisecond))
@@ -387,7 +436,7 @@ func main() {
 		ms := Min(float32(elapsed)/float32(time.Millisecond), 50)
 		state.CheckKeys(ms)
 		state.Update(ms)
-		state.UpdateViewport()
+		state.UpdateViewport(ms)
 		state.Paint(ms)
 	}
 }
