@@ -211,8 +211,13 @@ func (s *State) NewPlayer(x float32, y float32) (p *Player) {
 		Acceleration: 0.001,
 		Deceleration: 0.001,
 	}
+	p.Sprite.SetZ(1)
 	p.Sprite.SetFrame(0)
 	return p
+}
+
+func (p *Player) Die() {
+	p.Sprite.Collide = false
 }
 
 func (p *Player) Jump() {
@@ -482,33 +487,35 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 		sprite.Move(twodee.Pt(-1,0))
 		dX = 0
 	}
-	for _, block := range s.boundaries {
-		if dX != 0 && !sprite.TestMove(dX, 0, block) {
-			if sprite.TestMove(dX, -block.Height(), block) {
-				// Allows running up small bumps
-				sprite.Move(twodee.Pt(0, -block.Height()))
-			} else {
-				if dX < 0 {
-					sprite.MoveTo(twodee.Pt(block.X()+block.Width(), sprite.Y()))
-					result |= HITLEFT
+	if sprite.Collide {
+		for _, block := range s.boundaries {
+			if dX != 0 && !sprite.TestMove(dX, 0, block) {
+				if sprite.TestMove(dX, -block.Height(), block) {
+					// Allows running up small bumps
+					sprite.Move(twodee.Pt(0, -block.Height()))
 				} else {
-					sprite.MoveTo(twodee.Pt(block.X()-sprite.Width(), sprite.Y()))
-					result |= HITRIGHT
+					if dX < 0 {
+						sprite.MoveTo(twodee.Pt(block.X()+block.Width(), sprite.Y()))
+						result |= HITLEFT
+					} else {
+						sprite.MoveTo(twodee.Pt(block.X()-sprite.Width(), sprite.Y()))
+						result |= HITRIGHT
+					}
+					sprite.VelocityX = 0
+					dX = 0
 				}
-				sprite.VelocityX = 0
-				dX = 0
 			}
-		}
-		if dY != 0 && !sprite.TestMove(0, dY, block) {
-			if dY < 0 {
-				sprite.MoveTo(twodee.Pt(sprite.X(), block.Y()+block.Height()))
-				result |= HITTOP
-			} else {
-				sprite.MoveTo(twodee.Pt(sprite.X(), block.Y()-sprite.Height()))
-				result |= HITBOTTOM
+			if dY != 0 && !sprite.TestMove(0, dY, block) {
+				if dY < 0 {
+					sprite.MoveTo(twodee.Pt(sprite.X(), block.Y()+block.Height()))
+					result |= HITTOP
+				} else {
+					sprite.MoveTo(twodee.Pt(sprite.X(), block.Y()-sprite.Height()))
+					result |= HITBOTTOM
+				}
+				sprite.VelocityY = 0
+				dY = 0
 			}
-			sprite.VelocityY = 0
-			dY = 0
 		}
 	}
 	if dX != 0 || dY != 0 {
@@ -539,6 +546,7 @@ func (s *State) Update(ms float32) {
 			} else {
 				health := s.ChangeHealth(-1)
 				if health == 0 {
+					s.player.Die()
 					s.ChangeLives(-1)
 					s.ChangeHealth(s.healthbar.Max())
 				}
