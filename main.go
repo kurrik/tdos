@@ -388,6 +388,7 @@ type State struct {
 	livesbar   *LivesBar
 	healthbar  *LivesBar
 	running    bool
+	Victory    bool
 	score      int
 	nextlife   int
 	boundaries []*twodee.Sprite
@@ -496,8 +497,6 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 		dX = 0
 	}
 	if b.Max.X+dX > s.env.Width() {
-		// Poor man's victory
-		s.running = false
 		/*
 			fmt.Printf("HITRIGHT\n")
 			fmt.Printf("sprite.RelativeBounds(s.env) %v\n", sprite.RelativeBounds(s.env))
@@ -592,6 +591,12 @@ func (s *State) Update(ms float32) {
 			s.UpdateViewport(0)
 		}
 	}
+	if b.Max.X >= s.env.Width() {
+		// Poor man's victory
+		s.running = false
+		s.Victory = true
+	}
+
 }
 
 func (s *State) UpdateViewport(ms float32) {
@@ -787,6 +792,7 @@ func Init(system *twodee.System, window *twodee.Window) (state *State, err error
 	state.SetMaxHealth(3)
 	state.ChangeHealth(3)
 	state.running = true
+	state.Victory = false
 	return
 }
 
@@ -869,7 +875,11 @@ func main() {
 		state.Paint(ms)
 	}
 
-	splash, err = InitSplash(system, window, 1)
+	frame := 1
+	if state.Victory {
+		frame = 2
+	}
+	splash, err = InitSplash(system, window, frame)
 	Check(err)
 	for splash.Running() {
 		splash.Paint()
