@@ -209,7 +209,7 @@ func (s *State) NewPlayer(x float32, y float32) (p *Player) {
 		StartX:       x,
 		StartY:       y,
 		FrameCounter: 0,
-		JumpSpeed:    0.6,
+		JumpSpeed:    1.2,
 		WalkSpeed:    0.03,
 		RunSpeed:     0.6,
 		Acceleration: 0.001,
@@ -234,29 +234,31 @@ func (p *Player) Die() {
 }
 
 func (p *Player) Jump() {
-	p.Sprite.VelocityY = -p.JumpSpeed
-	p.State &= 511 ^ (PLAYER_STOPPED | PLAYER_JUMPING)
-	p.State |= (PLAYER_JUMPING)
+	if p.State&PLAYER_JUMPING != PLAYER_JUMPING {
+		p.Sprite.VelocityY = -p.JumpSpeed
+		p.State &= 511 ^ (PLAYER_STOPPED | PLAYER_JUMPING)
+		p.State |= (PLAYER_JUMPING)
+	}
 }
 
 func (p *Player) Left(ms float32) {
 	var v = p.Sprite.VelocityX - p.Acceleration*ms
 	p.Sprite.VelocityX = Max(-p.RunSpeed, Min(-p.WalkSpeed, v))
-	p.State &= 511 ^ (FACING_RIGHT | PLAYER_STOPPED | PLAYER_JUMPING)
+	p.State &= 511 ^ (FACING_RIGHT | PLAYER_STOPPED)
 	p.State |= (FACING_LEFT | PLAYER_WALKING)
 }
 
 func (p *Player) Right(ms float32) {
 	var v = p.Sprite.VelocityX + p.Acceleration*ms
 	p.Sprite.VelocityX = Min(p.RunSpeed, Max(p.WalkSpeed, v))
-	p.State &= 511 ^ (FACING_LEFT | PLAYER_STOPPED | PLAYER_JUMPING)
+	p.State &= 511 ^ (FACING_LEFT | PLAYER_STOPPED)
 	p.State |= (FACING_RIGHT | PLAYER_WALKING)
 }
 
 func (p *Player) Slow(ms float32) {
 	if Abs(p.Sprite.VelocityX) <= p.Deceleration*ms {
 		p.Sprite.VelocityX = 0
-		p.State &= 511 ^ (PLAYER_WALKING | PLAYER_JUMPING)
+		p.State &= 511 ^ (PLAYER_WALKING)
 		p.State |= PLAYER_STOPPED
 	} else {
 		if p.Sprite.VelocityX > 0 {
@@ -289,7 +291,10 @@ func (p *Player) Bounce(c *Creature) {
 	p.Sprite.VelocityX = 0
 }
 
-func (p *Player) Update(ms float32) {
+func (p *Player) Update(result int, ms float32) {
+	if result&HITBOTTOM == HITBOTTOM {
+		p.State &= 511 ^ (PLAYER_JUMPING)
+	}
 	if time.Now().After(p.NextFrame) || p.LastState != p.State {
 		if anim, ok := p.Animations[p.State]; ok {
 			i := p.FrameCounter % anim.Len()
@@ -485,14 +490,14 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 		b  = sprite.RelativeBounds(s.env)
 	)
 	if b.Min.X+dX < 0 {
-		fmt.Printf("HITLEFT\n")
 		result |= HITLEFT
 		sprite.VelocityX = 0
 		sprite.Move(twodee.Pt(1,0))
 		dX = 0
 	}
 	if b.Max.X+dX > s.env.Width() {
-		fmt.Printf("HITRIGHT\n")
+		// Poor man's victory
+		s.running = false
 		/*
 			fmt.Printf("HITRIGHT\n")
 			fmt.Printf("sprite.RelativeBounds(s.env) %v\n", sprite.RelativeBounds(s.env))
@@ -557,7 +562,6 @@ func (s *State) Update(ms float32) {
 			if s.player.Sprite.CollidesWith(c.Sprite) {
 				if s.IsKillShot(c) {
 					s.SetScore(s.Score() + c.Points)
-					fmt.Println("Kill")
 					s.KillCreature(c)
 					s.player.Bounce(c)
 				} else {
@@ -575,8 +579,8 @@ func (s *State) Update(ms float32) {
 			c.Update(result, ms)
 		}
 	}
-	s.player.Update(ms)
-	s.UpdateSprite(s.player.Sprite, ms)
+	result := s.UpdateSprite(s.player.Sprite, ms)
+	s.player.Update(result, ms)
 
 	var b = s.player.Sprite.RelativeBounds(s.env)
 	if b.Max.Y > s.env.Height() + 1000 {
@@ -792,6 +796,7 @@ type Splash struct {
 	system *twodee.System
 	scene *twodee.Scene
 	sprite *twodee.Sprite
+	started time.Time
 }
 
 func InitSplash(system *twodee.System, window *twodee.Window, frame int) (splash *Splash, err error) {
@@ -805,11 +810,15 @@ func InitSplash(system *twodee.System, window *twodee.Window, frame int) (splash
 		scene: &twodee.Scene{},
 	}
 	system.SetKeyCallback(func(k, s int) {
-		splash.running = false
+		threshold := time.Duration(1) * time.Second
+		if time.Now().After(splash.started.Add(threshold)) {
+			splash.running = false
+		}
 	})
 	splash.sprite = system.NewSprite("splash", 0, 0, 320, 240, 0)
 	splash.sprite.SetFrame(frame)
 	splash.scene.AddChild(splash.sprite)
+	splash.started = time.Now()
 	return
 }
 
@@ -818,6 +827,10 @@ func (s *Splash) Running() bool {
 }
 
 func (s *Splash) Paint() {
+	threshold := time.Duration(5) * time.Second
+	if time.Now().After(s.started.Add(threshold)) {
+		s.running = false
+	}
 	s.system.Paint(s.scene)
 }
 
