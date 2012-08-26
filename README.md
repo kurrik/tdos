@@ -14,8 +14,9 @@ Tasks
 * Screen overlay (DONE)
 * Physics (DONE)
 * Monsters (DONE)
-* Collisions
-* Points
+* Collisions (DONE)
+* Points (DONE)
+* Death
 * 1ups
 * Better sprites
 * Parallax

@@ -236,8 +236,8 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 		sprite.Move(twodee.Pt(dX, dY))
 		moved = true
 	}
+	sprite.MoveTo(twodee.Pt(Round(sprite.X()), Round(sprite.Y())))
 	if moved {
-		sprite.MoveTo(twodee.Pt(Round(sprite.X()), Round(sprite.Y())))
 	}
 	return
 }
@@ -305,9 +305,13 @@ func (s *State) UpdateViewport(ms float32) {
 func (s *State) HandleAddBlock(block *twodee.EnvBlock, sprite *twodee.Sprite, x float32, y float32) {
 	switch block.Type {
 	case START:
-		s.char = s.system.NewSprite("char-textures", x, y-100, 32, 64, PLAYER)
-		s.char.SetFrame(2)
-		s.char.SetZ(0.4)
+		var (
+			tex = s.system.Textures["darwin-textures"]
+			width = (tex.Frames[0][1] - tex.Frames[0][0]) * 2
+			height = tex.Height * 2
+		)
+		s.char = s.system.NewSprite("darwin-textures", x, y-float32(height), width, height, PLAYER)
+		s.char.SetFrame(0)
 		s.env.AddChild(s.char)
 		fallthrough
 	case FLOOR:
@@ -356,6 +360,7 @@ func Init(system *twodee.System) (state *State, err error) {
 		TexInfo{"level-textures", "assets/level-textures.png", 16},
 		TexInfo{"char-textures", "assets/char-textures.png", 16},
 		TexInfo{"font1-textures", "assets/font1-textures.png", 0},
+		TexInfo{"darwin-textures", "assets/darwin-textures.png", 0},
 	}
 	for _, t := range textures {
 		if err = system.LoadTexture(t.Name, t.Path, twodee.IntNearest, t.Width); err != nil {
@@ -394,8 +399,8 @@ func Init(system *twodee.System) (state *State, err error) {
 		},
 		TextureName: "level-textures",
 		MapPath:     "assets/level-fw.png",
-		BlockWidth:  16,
-		BlockHeight: 16,
+		BlockWidth:  32,
+		BlockHeight: 32,
 	}
 	if err = state.env.Load(system, opts); err != nil {
 		return
