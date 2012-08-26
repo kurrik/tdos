@@ -22,6 +22,14 @@ import (
 	"time"
 )
 
+const (
+	HITLEFT   = 1 << iota
+	HITRIGHT  = 1 << iota
+	HITTOP    = 1 << iota
+	HITBOTTOM = 1 << iota
+	OK        = 1 << iota
+)
+
 func Check(err error) {
 	if err != nil {
 		fmt.Printf("[error]: %v\n", err)
@@ -54,6 +62,11 @@ func Round(a float32) float32 {
 	return float32(int32(a + 0.5))
 }
 
+type Creature struct {
+	Sprite *twodee.Sprite
+	Speed  float32
+}
+
 type State struct {
 	system     *twodee.System
 	scene      *twodee.Scene
@@ -66,7 +79,7 @@ type State struct {
 	running    bool
 	score      int
 	boundaries []*twodee.Sprite
-	creatures  []*twodee.Sprite
+	creatures  []*Creature
 	screenxmin float32
 	screenxmax float32
 	screenymin float32
@@ -117,22 +130,34 @@ func (s *State) CheckKeys(ms float32) {
 
 func (s *State) Visible(sprite *twodee.Sprite) bool {
 	var (
-		left   = 0 - s.env.X
-		right  = left + float32(s.window.Width)
-		top    = 0 - s.env.Y
-		bottom = top + float32(s.window.Height)
+		buffer = float32(1024)
+		left   = 0 - s.env.X - buffer
+		right  = left + float32(s.window.Width) + buffer
+		top    = 0 - s.env.Y - buffer
+		bottom = top + float32(s.window.Height) + buffer
 	)
 	var (
-		inX = left <= sprite.X-float32(sprite.Width) && sprite.X <= right
-		inY = top <= sprite.Y-float32(sprite.Height) && sprite.Y <= bottom
+		inX = left <= sprite.X && sprite.X <= right
+		inY = top <= sprite.Y && sprite.Y <= bottom
 	)
 	return inX && inY
 }
 
-func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) {
+func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 	sprite.VelocityY += 0.3 // Gravity
-	dX := Round(sprite.VelocityX * ms)
-	dY := Round(sprite.VelocityY * ms)
+	dX := sprite.VelocityX * ms
+	dY := sprite.VelocityY * ms
+	result = 0
+	if sprite.GlobalX()+dX < 0 {
+		result |= HITLEFT
+		sprite.VelocityX = 0
+		dX = 0
+	}
+	if (sprite.GlobalX() + dX) > float32(s.env.Width-sprite.Width) {
+		result |= HITRIGHT
+		sprite.VelocityX = 0
+		dY = 0
+	}
 	for _, b := range s.boundaries {
 		if dX != 0 && !sprite.TestMove(dX, 0, b) {
 			if sprite.TestMove(dX, float32(-b.Height), b) {
@@ -140,8 +165,10 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) {
 			} else {
 				if dX < 0 {
 					sprite.X = b.X + float32(b.Width)
+					result |= HITLEFT
 				} else {
 					sprite.X = b.X - float32(sprite.Width)
+					result |= HITRIGHT
 				}
 				sprite.VelocityX = 0
 				dX = 0
@@ -150,23 +177,36 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) {
 		if dY != 0 && !sprite.TestMove(0, dY, b) {
 			if dY < 0 {
 				sprite.Y = b.Y + float32(b.Height)
+				result |= HITTOP
 			} else {
 				sprite.Y = b.Y - float32(sprite.Height)
+				result |= HITBOTTOM
 			}
 			sprite.VelocityY = 0
 			dY = 0
 		}
 	}
-	sprite.X = Round(sprite.X + dX)
-	sprite.Y = Round(sprite.Y + dY)
+	if dX != 0 {
+		sprite.X = Round(sprite.X + dX)
+	}
+	if dY != 0 {
+		sprite.Y = Round(sprite.Y + dY)
+	}
+	return
 }
 
 func (s *State) Update(ms float32) {
 	s.textfps.SetText(fmt.Sprintf("FPS %-5.1f", (1000.0 / ms)))
 	s.UpdateSprite(s.char, ms)
 	for _, c := range s.creatures {
-		if s.Visible(c) {
-			s.UpdateSprite(c, ms)
+		if s.Visible(c.Sprite) {
+			result := s.UpdateSprite(c.Sprite, ms)
+			switch {
+			case result & HITRIGHT == HITRIGHT:
+				c.Sprite.VelocityX = -c.Speed
+			case result & HITLEFT == HITLEFT:
+				c.Sprite.VelocityX = c.Speed
+			}
 		}
 	}
 }
@@ -200,10 +240,14 @@ func (s *State) HandleAddBlock(env *twodee.Env, block *twodee.EnvBlock, sprite *
 	case FLOOR:
 		s.boundaries = append(s.boundaries, sprite)
 	case BADGUY:
-		badguy := s.system.NewSprite("char-textures", x, y - 64, 32, 64, BADGUY)
-		badguy.SetFrame(1)
+		badguy := &Creature{
+			Sprite: s.system.NewSprite("char-textures", x, y-64, 32, 64, BADGUY),
+			Speed:  0.1,
+		}
+		badguy.Sprite.SetFrame(1)
+		badguy.Sprite.VelocityX = -badguy.Speed
 		s.creatures = append(s.creatures, badguy)
-		env.AddChild(badguy)
+		env.AddChild(badguy.Sprite)
 	}
 }
 
@@ -234,7 +278,7 @@ func Init(system *twodee.System) (state *State, err error) {
 		opts twodee.EnvOpts
 	)
 	state = &State{}
-	state.creatures = make([]*twodee.Sprite, 0)
+	state.creatures = make([]*Creature, 0)
 	state.boundaries = make([]*twodee.Sprite, 0)
 	state.hud = &twodee.Scene{}
 	state.scene = &twodee.Scene{}
