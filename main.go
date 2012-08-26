@@ -426,7 +426,7 @@ func (s *State) Visible(sprite *twodee.Sprite) bool {
 	var (
 		wb     = s.window.View.Sub(s.env.Bounds().Min)
 		sb     = sprite.RelativeBounds(s.env)
-		buffer = float32(512)
+		buffer = float32(32)
 	)
 	wb.Min.X -= buffer
 	wb.Min.Y -= buffer
