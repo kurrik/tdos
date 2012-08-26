@@ -89,7 +89,7 @@ type State struct {
 func (s *State) SetScore(score int) {
 	s.score = score
 	s.textscore.SetText(fmt.Sprintf("%v", s.score))
-	s.textscore.X = s.window.View.Max.X - float32(s.textscore.Width)
+	s.textscore.MoveTo(twodee.Pt(s.window.View.Max.X-s.textscore.Width(), 0))
 }
 
 func (s *State) HandleKeys(key, state int) {
@@ -130,81 +130,72 @@ func (s *State) CheckKeys(ms float32) {
 
 func (s *State) Visible(sprite *twodee.Sprite) bool {
 	var (
-		buffer = float32(1024)
-		left   = 0 - s.env.X - buffer
-		right  = left + float32(s.window.View.Max.X) + buffer
-		top    = 0 - s.env.Y - buffer
-		bottom = top + float32(s.window.View.Max.Y) + buffer
+		wb = s.window.View.Sub(s.env.Bounds().Min)
+		sb = sprite.RelativeBounds(s.env)
 	)
-	var (
-		inX = left <= sprite.X && sprite.X <= right
-		inY = top <= sprite.Y && sprite.Y <= bottom
-	)
-	return inX && inY
+	return sb.Overlaps(wb)
 }
 
 func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 	sprite.VelocityY += 0.3 // Gravity
-	dX := sprite.VelocityX * ms
-	dY := sprite.VelocityY * ms
-	result = 0
-	if sprite.GlobalX()+dX < 0 {
+	var (
+		dX = sprite.VelocityX * ms
+		dY = sprite.VelocityY * ms
+		b  = sprite.RelativeBounds(s.env)
+	)
+	if b.Min.X+dX < 0 {
 		result |= HITLEFT
 		sprite.VelocityX = 0
 		dX = 0
 	}
-	fmt.Printf("Sprite X: %v Sprite GlobalX: %v env Width: %v\n", sprite.X, sprite.GlobalX(), s.env.Width)
-	fmt.Println(sprite.Parent().GlobalX())
-	if (sprite.GlobalX() + dX) > float32(s.env.Width-sprite.Width-100) {
-		fmt.Println("Off right")
+	if b.Max.X+dX > s.env.Width() {
+		/*
+			fmt.Printf("HITRIGHT\n")
+			fmt.Printf("sprite.RelativeBounds(s.env) %v\n", sprite.RelativeBounds(s.env))
+			fmt.Printf("sprite.LocalBounds() %v\n", sprite.Bounds())
+		*/
 		result |= HITRIGHT
 		sprite.VelocityX = 0
-		dY = 0
+		dX = 0
 	}
-	for _, b := range s.boundaries {
-		if dX != 0 && !sprite.TestMove(dX, 0, b) {
-			if sprite.TestMove(dX, float32(-b.Height), b) {
-				sprite.Y -= float32(b.Height)
+	for _, block := range s.boundaries {
+		if dX != 0 && !sprite.TestMove(dX, 0, block) {
+			if sprite.TestMove(dX, -block.Height(), block) {
+				// Allows running up small bumps
+				sprite.Move(twodee.Pt(0, -block.Height()))
 			} else {
 				if dX < 0 {
-					sprite.X = b.X + float32(b.Width)
+					sprite.MoveTo(twodee.Pt(block.X()+block.Width(), sprite.Y()))
 					result |= HITLEFT
 				} else {
-					sprite.X = b.X - float32(sprite.Width)
+					sprite.MoveTo(twodee.Pt(block.X()-sprite.Width(), sprite.Y()))
 					result |= HITRIGHT
 				}
 				sprite.VelocityX = 0
 				dX = 0
 			}
 		}
-		if dY != 0 && !sprite.TestMove(0, dY, b) {
+		if dY != 0 && !sprite.TestMove(0, dY, block) {
 			if dY < 0 {
-				sprite.Y = b.Y + float32(b.Height)
+				sprite.MoveTo(twodee.Pt(sprite.X(), block.Y()+block.Height()))
 				result |= HITTOP
 			} else {
-				sprite.Y = b.Y - float32(sprite.Height)
+				sprite.MoveTo(twodee.Pt(sprite.X(), block.Y()-sprite.Height()))
 				result |= HITBOTTOM
 			}
 			sprite.VelocityY = 0
 			dY = 0
 		}
 	}
-	if dX != 0 {
-		sprite.X = Round(sprite.X + dX)
-	}
-	if dY != 0 {
-		sprite.Y = Round(sprite.Y + dY)
-	}
+	sprite.Move(twodee.Pt(dX, dY))
 	return
 }
 
 func (s *State) IsKillShot(c *Creature) bool {
 	var (
-		//bufferx = float32(c.Sprite.Width) / 5
-		buffery = float32(c.Sprite.Height) / 2
+		buffery  = float32(c.Sprite.Height()) / 2
 		downward = s.char.VelocityY > 0
-		hitshead = s.char.Y + float32(s.char.Height) - c.Sprite.Y < buffery
-		//crossesx = c.char.X + float32(s.char.Width) > c.Sprite.X + bufferx || c.char.X
+		hitshead = s.char.Y()+float32(s.char.Height())-c.Sprite.Y() < buffery
 	)
 	return downward && hitshead
 }
@@ -220,9 +211,9 @@ func (s *State) Update(ms float32) {
 		if s.Visible(c.Sprite) {
 			result := s.UpdateSprite(c.Sprite, ms)
 			switch {
-			case result & HITRIGHT == HITRIGHT:
+			case result&HITRIGHT == HITRIGHT:
 				c.Sprite.VelocityX = -c.Speed
-			case result & HITLEFT == HITLEFT:
+			case result&HITLEFT == HITLEFT:
 				c.Sprite.VelocityX = c.Speed
 			}
 		}
@@ -231,29 +222,26 @@ func (s *State) Update(ms float32) {
 }
 
 func (s *State) UpdateViewport() {
-	s.env.X = 0 - s.char.X + (float32(s.window.View.Max.X) / 2)
-	s.env.Y = 0 - s.char.Y + (float32(s.window.View.Max.Y) / 2)
-	if s.env.X < s.screenxmin {
-		s.env.X = s.screenxmin
-	}
-	if s.env.X > s.screenxmax {
-		s.env.X = s.screenxmax
-	}
-	if s.env.Y < s.screenymin {
-		s.env.Y = s.screenymin
-	}
-	if s.env.Y > s.screenymax {
-		s.env.Y = s.screenymax
-	}
+	var (
+		b = s.env.RelativeBounds(s.char)
+		v = s.window.View
+		x = Min(Max(b.Min.X+v.Dx()/2, s.screenxmin), s.screenxmax)
+		y = Min(Max(b.Min.Y+v.Dy()/2, s.screenymin), s.screenymax)
+	)
+	/*
+		fmt.Printf("Bounds %v\n", s.char.GlobalBounds())
+		fmt.Printf("s.env.RelativeBounds(s.char) %v\n", s.env.RelativeBounds(s.char))
+		fmt.Printf("s.char.RelativeBounds(s.env) %v\n", s.char.RelativeBounds(s.env))
+		fmt.Printf("Moving viewport to %v, %v\n", x, y)
+	*/
+	s.env.MoveTo(twodee.Pt(x, y))
 }
 
 func (s *State) HandleAddBlock(env *twodee.Env, block *twodee.EnvBlock, sprite *twodee.Sprite, x float32, y float32) {
 	switch block.Type {
 	case START:
-		s.char = s.system.NewSprite("char-textures", 0, 0, 32, 64, PLAYER)
+		s.char = s.system.NewSprite("char-textures", x, y-100, 32, 64, PLAYER)
 		s.char.SetFrame(2)
-		s.char.X = sprite.X
-		s.char.Y = sprite.Y - 100
 		env.AddChild(s.char)
 		fallthrough
 	case FLOOR:
@@ -360,9 +348,9 @@ func Init(system *twodee.System) (state *State, err error) {
 	state.env = env
 	state.scene.AddChild(env)
 	state.system.SetKeyCallback(func(k, s int) { state.HandleKeys(k, s) })
-	state.screenxmin = float32(-state.env.Width) + state.window.View.Max.X
+	state.screenxmin = float32(-state.env.Width()) + state.window.View.Max.X
 	state.screenxmax = 0
-	state.screenymin = float32(-state.env.Height) + state.window.View.Max.Y
+	state.screenymin = float32(-state.env.Height()) + state.window.View.Max.Y
 	state.screenymax = 0
 
 	// Do this later so that the hud renders last
@@ -371,7 +359,7 @@ func Init(system *twodee.System) (state *State, err error) {
 	state.textfps = system.NewText("font1-textures", 0, float32(state.window.View.Max.Y-32), 1, "")
 	state.hud.AddChild(state.textscore)
 	state.hud.AddChild(state.textfps)
-	state.hud.Z = 0.5
+	state.hud.SetZ(0.5)
 	state.SetScore(0)
 	state.running = true
 	return
