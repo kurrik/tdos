@@ -720,7 +720,7 @@ type Splash struct {
 }
 
 func InitSplash(system *twodee.System, window *twodee.Window) (splash *Splash, err error) {
-	if system.LoadTexture("splash", "assets/splash-fw.png", twodee.IntNearest, 320); err != nil {
+	if system.LoadTexture("splash", "assets/splash-fw.png", twodee.IntNearest, 0); err != nil {
 		return
 	}
 	splash = &Splash{
