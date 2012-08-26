@@ -128,8 +128,8 @@ func (l *LivesBar) Render() {
 }
 
 const (
-	PLAYER_LEFT = 1 << iota
-	PLAYER_RIGHT = 1 << iota
+	FACING_LEFT    = 1 << iota
+	FACING_RIGHT   = 1 << iota
 	PLAYER_STOPPED = 1 << iota
 	PLAYER_WALKING = 1 << iota
 	PLAYER_JUMPING = 1 << iota
@@ -173,17 +173,17 @@ func (s *State) NewPlayer(x float32, y float32) (p *Player) {
 		starty  = y - float32(height)
 	)
 	a := map[int]*Animation{
-		PLAYER_STOPPED | PLAYER_LEFT:  Anim([]int{4,5}, 400),
-		PLAYER_STOPPED | PLAYER_RIGHT: Anim([]int{0,1}, 400),
-		PLAYER_WALKING | PLAYER_LEFT:  Anim([]int{3,5}, 80),
-		PLAYER_WALKING | PLAYER_RIGHT: Anim([]int{0,2}, 80),
-		PLAYER_JUMPING | PLAYER_LEFT:  Anim([]int{5}, 80),
-		PLAYER_JUMPING | PLAYER_RIGHT: Anim([]int{0}, 80),
+		PLAYER_STOPPED | FACING_LEFT:  Anim([]int{4, 5}, 400),
+		PLAYER_STOPPED | FACING_RIGHT: Anim([]int{0, 1}, 400),
+		PLAYER_WALKING | FACING_LEFT:  Anim([]int{3, 5}, 80),
+		PLAYER_WALKING | FACING_RIGHT: Anim([]int{0, 2}, 80),
+		PLAYER_JUMPING | FACING_LEFT:  Anim([]int{5}, 80),
+		PLAYER_JUMPING | FACING_RIGHT: Anim([]int{0}, 80),
 	}
 	p = &Player{
 		Sprite:       s.system.NewSprite("darwin-textures", x, starty, width, height, PLAYER),
-		State:        PLAYER_STOPPED | PLAYER_RIGHT,
-		LastState:    PLAYER_STOPPED | PLAYER_RIGHT,
+		State:        PLAYER_STOPPED | FACING_RIGHT,
+		LastState:    PLAYER_STOPPED | FACING_RIGHT,
 		NextFrame:    time.Now(),
 		Animations:   a,
 		FrameCounter: 0,
@@ -206,15 +206,15 @@ func (p *Player) Jump() {
 func (p *Player) Left(ms float32) {
 	var v = p.Sprite.VelocityX - p.Acceleration*ms
 	p.Sprite.VelocityX = Max(-p.RunSpeed, Min(-p.WalkSpeed, v))
-	p.State &= 511 ^ (PLAYER_RIGHT | PLAYER_STOPPED | PLAYER_JUMPING)
-	p.State |= (PLAYER_LEFT | PLAYER_WALKING)
+	p.State &= 511 ^ (FACING_RIGHT | PLAYER_STOPPED | PLAYER_JUMPING)
+	p.State |= (FACING_LEFT | PLAYER_WALKING)
 }
 
 func (p *Player) Right(ms float32) {
 	var v = p.Sprite.VelocityX + p.Acceleration*ms
 	p.Sprite.VelocityX = Min(p.RunSpeed, Max(p.WalkSpeed, v))
-	p.State &= 511 ^ (PLAYER_LEFT | PLAYER_STOPPED | PLAYER_JUMPING)
-	p.State |= (PLAYER_RIGHT | PLAYER_WALKING)
+	p.State &= 511 ^ (FACING_LEFT | PLAYER_STOPPED | PLAYER_JUMPING)
+	p.State |= (FACING_RIGHT | PLAYER_WALKING)
 }
 
 func (p *Player) Slow(ms float32) {
@@ -266,9 +266,69 @@ func (p *Player) Update(ms float32) {
 }
 
 type Creature struct {
-	Sprite *twodee.Sprite
-	Speed  float32
-	Points int
+	Sprite       *twodee.Sprite
+	Points       int
+	State        int
+	LastState    int
+	Speed        float32
+	JumpSpeed    float32
+	NextFrame    time.Time
+	FrameCounter int
+	Animations   map[int]*Animation
+}
+
+func (s *State) NewCreature(x float32, y float32) (c *Creature) {
+	var (
+		texture = s.system.Textures["enemy-textures"]
+		width   = (texture.Frames[0][1] - texture.Frames[0][0]) * 2
+		height  = texture.Height * 2
+		starty  = y - float32(height)
+	)
+	a := map[int]*Animation{}
+	c = &Creature{
+		Sprite:       s.system.NewSprite("enemy-textures", x, starty, width, height, BADGUY),
+		State:        FACING_LEFT,
+		LastState:    FACING_RIGHT,
+		NextFrame:    time.Now(),
+		Animations:   a,
+		FrameCounter: 0,
+		JumpSpeed:    0.8,
+		Speed:        0.05,
+		Points:       5,
+	}
+	c.Sprite.SetFrame(0)
+	c.Sprite.VelocityX = -c.Speed
+	return
+}
+
+func (c *Creature) Update(result int, ms float32) {
+	if time.Now().After(c.NextFrame) || c.LastState != c.State {
+		if anim, ok := c.Animations[c.State]; ok {
+			i := c.FrameCounter % anim.Len()
+			c.Sprite.SetFrame(anim.Frames[i])
+			c.NextFrame = time.Now().Add(anim.Duration)
+		}
+		c.FrameCounter = (c.FrameCounter + 1) % 1000
+		c.LastState = c.State
+	}
+	switch {
+	case result&HITRIGHT == HITRIGHT:
+		c.Sprite.VelocityX = -c.Speed
+	case result&HITLEFT == HITLEFT:
+		c.Sprite.VelocityX = c.Speed
+	}
+}
+
+func (s *State) NewMushroom(x float32, y float32) *Creature {
+	c := s.NewCreature(x, y)
+	c.Speed = 0.05
+	c.JumpSpeed = 0.8
+	c.Points = 100
+	c.Animations = map[int]*Animation{
+		FACING_LEFT:  Anim([]int{0, 1}, 120),
+		FACING_RIGHT: Anim([]int{0, 1}, 120),
+	}
+	return c
 }
 
 type State struct {
@@ -290,24 +350,6 @@ type State struct {
 	screenxmax float32
 	screenymin float32
 	screenymax float32
-}
-
-func (s *State) SpawnCreature(t int, x float32, y float32) {
-	var (
-		c *Creature
-	)
-	switch t {
-	case BADGUY:
-		c = &Creature{
-			Sprite: s.system.NewSprite("char-textures", x, y-64, 32, 64, t),
-			Speed:  0.1,
-			Points: 100,
-		}
-	}
-	c.Sprite.SetFrame(1)
-	c.Sprite.VelocityX = -c.Speed
-	s.creatures = append(s.creatures, c)
-	s.env.AddChild(c.Sprite)
 }
 
 func (s *State) KillCreature(c *Creature) {
@@ -387,10 +429,9 @@ func (s *State) Visible(sprite *twodee.Sprite) bool {
 func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 	sprite.VelocityY += 0.2 // Gravity
 	var (
-		dX    = sprite.VelocityX * ms
-		dY    = sprite.VelocityY * ms
-		b     = sprite.RelativeBounds(s.env)
-		moved = false
+		dX = sprite.VelocityX * ms
+		dY = sprite.VelocityY * ms
+		b  = sprite.RelativeBounds(s.env)
 	)
 	if b.Min.X+dX < 0 {
 		result |= HITLEFT
@@ -412,7 +453,6 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 			if sprite.TestMove(dX, -block.Height(), block) {
 				// Allows running up small bumps
 				sprite.Move(twodee.Pt(0, -block.Height()))
-				moved = true
 			} else {
 				if dX < 0 {
 					sprite.MoveTo(twodee.Pt(block.X()+block.Width(), sprite.Y()))
@@ -421,7 +461,6 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 					sprite.MoveTo(twodee.Pt(block.X()-sprite.Width(), sprite.Y()))
 					result |= HITRIGHT
 				}
-				moved = true
 				sprite.VelocityX = 0
 				dX = 0
 			}
@@ -434,18 +473,14 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 				sprite.MoveTo(twodee.Pt(sprite.X(), block.Y()-sprite.Height()))
 				result |= HITBOTTOM
 			}
-			moved = true
 			sprite.VelocityY = 0
 			dY = 0
 		}
 	}
 	if dX != 0 || dY != 0 {
 		sprite.Move(twodee.Pt(dX, dY))
-		moved = true
 	}
 	sprite.MoveTo(twodee.Pt(Round(sprite.X()), Round(sprite.Y())))
-	if moved {
-	}
 	return
 }
 
@@ -474,12 +509,7 @@ func (s *State) Update(ms float32) {
 		}
 		if s.Visible(c.Sprite) {
 			result := s.UpdateSprite(c.Sprite, ms)
-			switch {
-			case result&HITRIGHT == HITRIGHT:
-				c.Sprite.VelocityX = -c.Speed
-			case result&HITLEFT == HITLEFT:
-				c.Sprite.VelocityX = c.Speed
-			}
+			c.Update(result, ms)
 		}
 	}
 	s.player.Update(ms)
@@ -503,7 +533,7 @@ func (s *State) UpdateViewport(ms float32) {
 		fmt.Printf("s.char.RelativeBounds(s.env) %v\n", s.char.RelativeBounds(s.env))
 		fmt.Printf("Moving viewport to %v, %v\n", x, y)
 	*/
-	if ms == 0 || (dy < 1 && dy > -1){
+	if ms == 0 || (dy < 1 && dy > -1) {
 		s.env.MoveTo(twodee.Pt(x, y))
 		return
 	}
@@ -522,7 +552,9 @@ func (s *State) HandleAddBlock(block *twodee.EnvBlock, sprite *twodee.Sprite, x 
 	case FLOOR:
 		s.boundaries = append(s.boundaries, sprite)
 	case BADGUY:
-		s.SpawnCreature(block.Type, x, y)
+		c := s.NewMushroom(x, y)
+		s.creatures = append(s.creatures, c)
+		s.env.AddChild(c.Sprite)
 	}
 }
 
@@ -563,7 +595,7 @@ func Init(system *twodee.System) (state *State, err error) {
 	state.system.Open(state.window)
 	textures := []TexInfo{
 		TexInfo{"level-textures", "assets/level-textures.png", 16},
-		TexInfo{"char-textures", "assets/char-textures.png", 16},
+		TexInfo{"enemy-textures", "assets/enemy-textures-fw.png", 0},
 		TexInfo{"font1-textures", "assets/font1-textures.png", 0},
 		TexInfo{"darwin-textures", "assets/darwin-textures.png", 0},
 		TexInfo{"powerups-textures", "assets/powerups-textures-fw.png", 0},
