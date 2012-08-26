@@ -21,11 +21,11 @@ Tasks
 * Better sprites (DONE)
 * Hit points (DONE)
 * Death animation (DONE)
+* Tune controls (DONE)
+* Ending? (DONE)
 * Don't jump forever
 * Enemies spawn others
-* Tune controls (DONE)
 * Bigger map
-* Ending?
 * Music
 * Parallax
 
