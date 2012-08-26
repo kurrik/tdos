@@ -19,11 +19,11 @@ Tasks
 * Death (DONE)
 * 1ups (DONE)
 * Better sprites (DONE)
-* Hit points
-* Death animation
+* Hit points (DONE)
+* Death animation (DONE)
 * Don't jump forever
 * Enemies spawn others
-* Tune controls
+* Tune controls (DONE)
 * Bigger map
 * Ending?
 * Music

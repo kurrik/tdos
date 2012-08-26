@@ -420,6 +420,9 @@ func (s *State) ChangeMaxLives(i int) {
 
 func (s *State) ChangeLives(i int) int {
 	var lives = s.livesbar.SetAvailable(s.livesbar.Available() + i)
+	if lives == 0 {
+		s.running = false
+	}
 	return lives
 }
 
@@ -578,10 +581,12 @@ func (s *State) Update(ms float32) {
 	var b = s.player.Sprite.RelativeBounds(s.env)
 	if b.Max.Y > s.env.Height() + 1000 {
 		//Player has fallen off the map
-		s.ChangeLives(-1)
-		s.ChangeHealth(s.healthbar.Max())
-		s.player.Respawn()
-		s.UpdateViewport(0)
+		lives := s.ChangeLives(-1)
+		if lives > 0 {
+			s.ChangeHealth(s.healthbar.Max())
+			s.player.Respawn()
+			s.UpdateViewport(0)
+		}
 	}
 }
 
@@ -789,7 +794,7 @@ type Splash struct {
 	sprite *twodee.Sprite
 }
 
-func InitSplash(system *twodee.System, window *twodee.Window) (splash *Splash, err error) {
+func InitSplash(system *twodee.System, window *twodee.Window, frame int) (splash *Splash, err error) {
 	if system.LoadTexture("splash", "assets/splash-fw.png", twodee.IntNearest, 0); err != nil {
 		return
 	}
@@ -803,6 +808,7 @@ func InitSplash(system *twodee.System, window *twodee.Window) (splash *Splash, e
 		splash.running = false
 	})
 	splash.sprite = system.NewSprite("splash", 0, 0, 320, 240, 0)
+	splash.sprite.SetFrame(frame)
 	splash.scene.AddChild(splash.sprite)
 	return
 }
@@ -828,11 +834,12 @@ func main() {
 	}
 	system.Open(window)
 
-	splash, err := InitSplash(system, window)
+	splash, err := InitSplash(system, window, 0)
 	Check(err)
 	for splash.Running() {
 		splash.Paint()
 	}
+	splash = nil
 
 	state, err := Init(system, window)
 	Check(err)
@@ -848,4 +855,11 @@ func main() {
 		state.UpdateViewport(ms)
 		state.Paint(ms)
 	}
+
+	splash, err = InitSplash(system, window, 1)
+	Check(err)
+	for splash.Running() {
+		splash.Paint()
+	}
+
 }
