@@ -13,7 +13,8 @@ Tasks
 * Timer (DONE)
 * Screen overlay (DONE)
 * Physics (DONE)
-* Monsters
+* Monsters (DONE)
+* Collisions
 * Points
 * 1ups
 * Better sprites

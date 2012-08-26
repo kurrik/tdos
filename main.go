@@ -89,7 +89,7 @@ type State struct {
 func (s *State) SetScore(score int) {
 	s.score = score
 	s.textscore.SetText(fmt.Sprintf("%v", s.score))
-	s.textscore.X = float32(s.window.Width - s.textscore.Width)
+	s.textscore.X = s.window.View.Max.X - float32(s.textscore.Width)
 }
 
 func (s *State) HandleKeys(key, state int) {
@@ -132,9 +132,9 @@ func (s *State) Visible(sprite *twodee.Sprite) bool {
 	var (
 		buffer = float32(1024)
 		left   = 0 - s.env.X - buffer
-		right  = left + float32(s.window.Width) + buffer
+		right  = left + float32(s.window.View.Max.X) + buffer
 		top    = 0 - s.env.Y - buffer
-		bottom = top + float32(s.window.Height) + buffer
+		bottom = top + float32(s.window.View.Max.Y) + buffer
 	)
 	var (
 		inX = left <= sprite.X && sprite.X <= right
@@ -153,7 +153,10 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 		sprite.VelocityX = 0
 		dX = 0
 	}
-	if (sprite.GlobalX() + dX) > float32(s.env.Width-sprite.Width) {
+	fmt.Printf("Sprite X: %v Sprite GlobalX: %v env Width: %v\n", sprite.X, sprite.GlobalX(), s.env.Width)
+	fmt.Println(sprite.Parent().GlobalX())
+	if (sprite.GlobalX() + dX) > float32(s.env.Width-sprite.Width-100) {
+		fmt.Println("Off right")
 		result |= HITRIGHT
 		sprite.VelocityX = 0
 		dY = 0
@@ -195,10 +198,25 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 	return
 }
 
+func (s *State) IsKillShot(c *Creature) bool {
+	var (
+		//bufferx = float32(c.Sprite.Width) / 5
+		buffery = float32(c.Sprite.Height) / 2
+		downward = s.char.VelocityY > 0
+		hitshead = s.char.Y + float32(s.char.Height) - c.Sprite.Y < buffery
+		//crossesx = c.char.X + float32(s.char.Width) > c.Sprite.X + bufferx || c.char.X
+	)
+	return downward && hitshead
+}
+
 func (s *State) Update(ms float32) {
 	s.textfps.SetText(fmt.Sprintf("FPS %-5.1f", (1000.0 / ms)))
-	s.UpdateSprite(s.char, ms)
 	for _, c := range s.creatures {
+		if s.char.CollidesWith(c.Sprite) {
+			if s.IsKillShot(c) {
+				fmt.Println("Kill")
+			}
+		}
 		if s.Visible(c.Sprite) {
 			result := s.UpdateSprite(c.Sprite, ms)
 			switch {
@@ -209,11 +227,12 @@ func (s *State) Update(ms float32) {
 			}
 		}
 	}
+	s.UpdateSprite(s.char, ms)
 }
 
 func (s *State) UpdateViewport() {
-	s.env.X = 0 - s.char.X + (float32(s.window.Width) / 2)
-	s.env.Y = 0 - s.char.Y + (float32(s.window.Height) / 2)
+	s.env.X = 0 - s.char.X + (float32(s.window.View.Max.X) / 2)
+	s.env.Y = 0 - s.char.Y + (float32(s.window.View.Max.Y) / 2)
 	if s.env.X < s.screenxmin {
 		s.env.X = s.screenxmin
 	}
@@ -341,15 +360,15 @@ func Init(system *twodee.System) (state *State, err error) {
 	state.env = env
 	state.scene.AddChild(env)
 	state.system.SetKeyCallback(func(k, s int) { state.HandleKeys(k, s) })
-	state.screenxmin = float32(-state.env.Width + state.window.Width)
+	state.screenxmin = float32(-state.env.Width) + state.window.View.Max.X
 	state.screenxmax = 0
-	state.screenymin = float32(-state.env.Height + state.window.Height)
+	state.screenymin = float32(-state.env.Height) + state.window.View.Max.Y
 	state.screenymax = 0
 
 	// Do this later so that the hud renders last
 	state.scene.AddChild(state.hud)
-	state.textscore = system.NewText("font1-textures", 0, 0, 4, "")
-	state.textfps = system.NewText("font1-textures", 0, float32(state.window.Height-32), 2, "")
+	state.textscore = system.NewText("font1-textures", 0, 0, 2, "")
+	state.textfps = system.NewText("font1-textures", 0, float32(state.window.View.Max.Y-32), 1, "")
 	state.hud.AddChild(state.textscore)
 	state.hud.AddChild(state.textfps)
 	state.hud.Z = 0.5
