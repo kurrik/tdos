@@ -4,6 +4,10 @@ The Destiny of Species
 The year is 1835.  Charles Darwin has just reached the Galapagos, only to find
 that the island hides a terrifying secret...
 
+LD48 submission here: http://www.ludumdare.com/compo/ludum-dare-24/?action=preview&uid=7913
+Builds available for OSX and Windows
+Please contact twitter.com/kurrik with feedback, especially if it doesn't work!
+
 Tasks
 -----
 * Load a level and construct a scene (DONE)
