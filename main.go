@@ -917,6 +917,7 @@ func InitSplash(system *twodee.System, window *twodee.Window, frame int) (splash
 			splash.running = false
 		}
 	})
+	fmt.Println(system.Textures)
 	splash.sprite = system.NewSprite("splash", 0, 0, int(window.View.Dx()), int(window.View.Dy()), 0)
 	splash.sprite.SetFrame(frame)
 	splash.scene.AddChild(splash.sprite)
@@ -951,7 +952,7 @@ func main() {
 		Width:  800,
 		Height: 600,
 		Title:  "TDoS",
-		Fullscreen: true,
+		Fullscreen: false,
 	}
 	system.Open(window)
 
