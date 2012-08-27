@@ -188,6 +188,8 @@ type Player struct {
 	Animations   map[int]*Animation
 	StartX       float32
 	StartY       float32
+	invincible   bool
+	vincibleat   time.Time
 }
 
 func (s *State) NewPlayer(x float32, y float32) (p *Player) {
@@ -219,10 +221,20 @@ func (s *State) NewPlayer(x float32, y float32) (p *Player) {
 		RunSpeed:     0.6,
 		Acceleration: 0.001,
 		Deceleration: 0.001,
+		invincible:   false,
 	}
 	p.Sprite.SetZ(1)
 	p.Sprite.SetFrame(0)
 	return p
+}
+
+func (p *Player) Invincible() bool {
+	return p.invincible
+}
+
+func (p *Player) SetInvincible() {
+	p.invincible = true
+	p.vincibleat = time.Now().Add(time.Duration(500) * time.Millisecond)
 }
 
 func (p *Player) Respawn() {
@@ -308,6 +320,9 @@ func (p *Player) Update(result int, ms float32) {
 		}
 		p.FrameCounter = (p.FrameCounter + 1) % 1000
 		p.LastState = p.State
+	}
+	if p.invincible && time.Now().After(p.vincibleat) {
+		p.invincible = false
 	}
 }
 
@@ -450,6 +465,10 @@ func (s *State) SetMaxHealth(health int) {
 }
 
 func (s *State) ChangeHealth(change int) int {
+	if change < 0 && s.player.Invincible() {
+		return s.healthbar.Available()
+	}
+	s.player.SetInvincible()
 	var health = s.healthbar.SetAvailable(s.healthbar.Available() + change)
 	return health
 }
@@ -646,7 +665,7 @@ func (s *State) Update(ms float32) {
 			s.UpdateViewport(0)
 		}
 	}
-	if b.Max.X >= s.env.Width() {
+	if b.Max.X >= s.env.Width() - 100 {
 		// Poor man's victory
 		s.running = false
 		s.Victory = true
@@ -914,6 +933,7 @@ func main() {
 		Width:  800,
 		Height: 600,
 		Title:  "TDoS",
+		Fullscreen: true,
 	}
 	system.Open(window)
 

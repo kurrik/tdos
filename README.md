@@ -24,7 +24,7 @@ Tasks
 * Tune controls (DONE)
 * Ending? (DONE)
 * Don't jump forever (DONE)
-* Enemies spawn others
+* Enemies spawn others (DONE)
 * Bigger map
 * Music
 * Parallax
