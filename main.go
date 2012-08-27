@@ -818,6 +818,24 @@ func Init(system *twodee.System, window *twodee.Window) (state *State, err error
 				Handler:    BlockHandler,
 			},
 			&twodee.EnvBlock{
+				Color:      color.RGBA{153, 153, 153, 255}, // Rock
+				Type:       FLOOR,
+				FrameIndex: 8,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
+				Color:      color.RGBA{118, 118, 118, 255}, // Rock left
+				Type:       FLOOR,
+				FrameIndex: 9,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
+				Color:      color.RGBA{84, 84, 84, 255}, // Rock right
+				Type:       FLOOR,
+				FrameIndex: 10,
+				Handler:    BlockHandler,
+			},
+			&twodee.EnvBlock{
 				Color:      color.RGBA{0, 0, 0, 255},
 				Type:       START,
 				FrameIndex: 1,
