@@ -42,3 +42,28 @@ Ideas (spoilers!)
 * Obviously monsters need to spawn a lot of small monsters
 * Fight through increasingly complex monsters
 * Giant boss monster, spawns tons of small monsters
+
+Building on Windows
+-------------------
+64bit!  http://tdm-gcc.tdragon.net/
+
+Seems to work from the "Git Bash" env
+Build GLEW
+http://stackoverflow.com/questions/6005076/building-glew-on-windows-with-mingw
+Copy GLEW includes to C:\Mingw64 includes
+Copy GLEW /lib output (.a files!) to C:\MinGW64\lib
+Copy GLEW DLLs to C:\Windows\System32
+
+Get GLFW
+Binary dist
+Copy glfw-2.7.6.bin.WIN32/lib-mingw/x64 stuff  to C:\MinGW64\lib
+Copy dist include to gcc include
+Copy glfw.dll to C:\Windows\System32
+
+go get github.com/banthar/gl
+
+go get github.com/metaleap/go-glfwdll-win64
+//go get github.com/jteeuwen/glfw
+
+
+Ffffffff http://stackoverflow.com/questions/10369513/dll-linking-via-windows-cgo-gcc-ld-gives-undefined-reference-to-function-e
