@@ -54,7 +54,7 @@ $(OSXBUILD)/Resources/assets/%.png: src/assets/%.png
 build/$(PROJECT)-osx-$(VERSION).zip: \
 	$(OSXBUILD)/Info.plist \
 	$(subst lib/,$(OSXBUILD)/MacOS/,$(wildcard lib/*.dylib)) \
-	$(subst scripts/,$(OSXBUILD)/MacOS/,scripts/launch.sh) \
+	$(OSXBUILD)/MacOS/launch.sh \
 	$(OSXBUILD)/MacOS/tdos \
 	$(subst src/,$(OSXBUILD)/Resources/,$(wildcard src/assets/*.png)) \
 	$(subst src/assets/,$(OSXBUILD)/Resources/, $(wildcard src/assets/*.icns))

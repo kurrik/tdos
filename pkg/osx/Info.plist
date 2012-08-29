@@ -3,7 +3,7 @@
 <plist version="1.0">
 <dict>
   <key>CFBundleGetInfoString</key>
-  <string>Ludum Dare 24 entry by Arne Roomann-Kurrik</string>
+  <string>Ludum Dare 24 entry by Arne Roomann-Kurrik.  Version 9.9.9.</string>
   <key>CFBundleExecutable</key>
   <string>launch.sh</string>
   <key>CFBundleIdentifier</key>
