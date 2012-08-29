@@ -234,7 +234,7 @@ func (p *Player) Invincible() bool {
 
 func (p *Player) SetInvincible() {
 	p.invincible = true
-	p.vincibleat = time.Now().Add(time.Duration(500) * time.Millisecond)
+	p.vincibleat = time.Now().Add(time.Duration(200) * time.Millisecond)
 }
 
 func (p *Player) Respawn() {
@@ -253,7 +253,7 @@ func (p *Player) Die() {
 func (p *Player) Jump() {
 	if p.State&PLAYER_JUMPING != PLAYER_JUMPING {
 		p.Sprite.VelocityY = -p.JumpSpeed
-		p.State &= 511 ^ (PLAYER_STOPPED | PLAYER_JUMPING)
+		p.State &= 511 ^ (PLAYER_STOPPED | PLAYER_WALKING)
 		p.State |= (PLAYER_JUMPING)
 	}
 }
@@ -297,15 +297,22 @@ func (p *Player) Rebound(c *Creature) {
 	} else {
 		p.Sprite.VelocityY = p.JumpSpeed
 	}
+	p.State &= 511 ^ (PLAYER_STOPPED | PLAYER_WALKING)
+	p.State |= (PLAYER_JUMPING)
 }
 
 func (p *Player) Bounce(c *Creature) {
 	if c.Sprite.Y() >= p.Sprite.Y() {
 		p.Sprite.VelocityY = -p.JumpSpeed
+		p.Sprite.Move(twodee.Pt(0,-2)) // Clear collision zone
 	} else {
 		p.Sprite.VelocityY = p.JumpSpeed
+		p.Sprite.Move(twodee.Pt(0,2)) // Clear collision zone
 	}
 	p.Sprite.VelocityX = 0
+	p.State &= 511 ^ (PLAYER_STOPPED | PLAYER_WALKING)
+	p.State |= (PLAYER_JUMPING)
+
 }
 
 func (p *Player) Update(result int, ms float32) {
@@ -528,7 +535,7 @@ func (s *State) Visible(sprite *twodee.Sprite) bool {
 	var (
 		wb     = s.window.View.Sub(s.env.Bounds().Min)
 		sb     = sprite.RelativeBounds(s.env)
-		buffer = float32(512)
+		buffer = float32(256)
 	)
 	wb.Min.X -= buffer
 	wb.Min.Y -= buffer
@@ -601,11 +608,11 @@ func (s *State) UpdateSprite(sprite *twodee.Sprite, ms float32) (result int) {
 
 func (s *State) IsKillShot(c *Creature) bool {
 	var (
-		buffery  = float32(c.Sprite.Height()) / 2
-		downward = s.player.Sprite.VelocityY > 0
-		hitshead = s.player.Sprite.Y()+float32(s.player.Sprite.Height())-c.Sprite.Y() < buffery
+		downward = s.player.Sprite.VelocityY > 0.1
+		//jumping = s.player.State&PLAYER_JUMPING == PLAYER_JUMPING
 	)
-	return downward && hitshead
+	//return downward && jumping
+	return downward //jumping wouldn't let you walk off cliffs
 }
 
 func (s *State) Update(ms float32) {
@@ -620,11 +627,13 @@ func (s *State) Update(ms float32) {
 					s.KillCreature(c)
 					s.player.Bounce(c)
 				} else {
-					health := s.ChangeHealth(-1)
+					health := s.healthbar.Available()
+					if !s.player.Invincible() {
+						s.player.Rebound(c)
+						health = s.ChangeHealth(-1)
+					}
 					if health == 0 {
 						s.player.Die()
-					} else {
-						s.player.Rebound(c)
 					}
 				}
 			}

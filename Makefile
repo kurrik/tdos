@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-.PHONY: build package clean
+.PHONY: build package clean run
 
 PROJECT  = tdos
 SOURCES  = $(wildcard src/*.go)
@@ -62,3 +62,5 @@ build/$(PROJECT)-osx-$(VERSION).zip: \
 
 build: build/$(PROJECT)-osx-$(VERSION).zip
 
+run: build
+	$(OSXBUILD)/MacOS/launch.sh
