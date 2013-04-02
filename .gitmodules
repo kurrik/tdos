@@ -1,0 +1,3 @@
+[submodule "src/twodee"]
+	path = src/twodee
+	url = git://github.com/kurrik/twodee.git

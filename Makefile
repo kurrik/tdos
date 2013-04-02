@@ -62,5 +62,9 @@ build/$(PROJECT)-osx-$(VERSION).zip: \
 
 build: build/$(PROJECT)-osx-$(VERSION).zip
 
+init:
+	git submodule init
+	git submodule update
+
 run: build
 	$(OSXBUILD)/MacOS/launch.sh

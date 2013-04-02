@@ -10,6 +10,13 @@ Builds available for OSX and Windows
 
 Please contact twitter.com/kurrik with feedback, especially if it doesn't work!
 
+Building
+--------
+Install deps, as listed in https://github.com/kurrik/twodee
+
+    make init
+    make run
+
 Tasks
 -----
 * Load a level and construct a scene (DONE)

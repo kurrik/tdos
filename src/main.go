@@ -16,7 +16,7 @@ package main
 
 import (
 	"fmt"
-	"github.com/kurrik/twodee"
+	"./twodee"
 	"image/color"
 	"math"
 	"math/rand"
